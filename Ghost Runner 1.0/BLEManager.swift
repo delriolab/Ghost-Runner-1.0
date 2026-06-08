@@ -4,15 +4,13 @@ import Combine
 
 final class BLEManager: NSObject, ObservableObject {
 
-    @Published var statusText = "Initializing..."
+    @Published var statusText = "Starting..."
 
     private var central: CBCentralManager!
 
     override init() {
         super.init()
-
         print("BLEManager INIT")
-
         central = CBCentralManager(delegate: self, queue: nil)
     }
 }
@@ -24,15 +22,11 @@ extension BLEManager: CBCentralManagerDelegate {
         print("STATE:", central.state.rawValue)
 
         if central.state == .poweredOn {
-
-            print("BLE ON → SCANNING")
-
+            print("SCANNING STARTED")
             statusText = "Scanning"
-
             central.scanForPeripherals(withServices: nil)
-
         } else {
-            print("Bluetooth not ready:", central.state.rawValue)
+            print("Bluetooth not ready")
         }
     }
 
@@ -42,8 +36,8 @@ extension BLEManager: CBCentralManagerDelegate {
                         rssi RSSI: NSNumber) {
 
         let name = peripheral.name ?? "nil"
-        let advName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "nil"
+        let adv = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "nil"
 
-        print("FOUND DEVICE → name:", name, "| adv:", advName)
+        print("FOUND:", name, "| adv:", adv)
     }
 }
