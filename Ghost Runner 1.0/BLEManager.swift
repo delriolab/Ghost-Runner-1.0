@@ -4,18 +4,18 @@ import Combine
 
 final class BLEManager: NSObject, ObservableObject {
 
-    // MARK: - UUIDs (must match firmware)
+    // MARK: - UUIDs
     static let serviceUUID = CBUUID(string: "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0")
     static let controlUUID = CBUUID(string: "E2C56DB6-DFFB-48D2-B060-D0F5A71096E0")
     static let triggerUUID = CBUUID(string: "E2C56DB7-DFFB-48D2-B060-D0F5A71096E0")
 
-    // MARK: - Published State
+    // MARK: - UI State
     @Published var isConnected = false
     @Published var statusText = "Scanning..."
 
     let hitPublisher = PassthroughSubject<Void, Never>()
 
-    // MARK: - BLE Internals
+    // MARK: - BLE
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
 
@@ -33,12 +33,18 @@ final class BLEManager: NSObject, ObservableObject {
     // MARK: - Public API
 
     func sendStart() {
-        guard isReady else { return }
+        guard isReady else {
+            print("Not ready to send START")
+            return
+        }
         write([0x01])
     }
 
     func sendStop() {
-        guard isReady else { return }
+        guard isReady else {
+            print("Not ready to send STOP")
+            return
+        }
         write([0x00])
     }
 
@@ -47,26 +53,31 @@ final class BLEManager: NSObject, ObservableObject {
         write([UInt8(val & 0xFF), UInt8(val >> 8)])
     }
 
-    // MARK: - Private Write
-
     private func write(_ bytes: [UInt8]) {
-        guard let p = peripheral, let c = controlChar else { return }
+        guard let p = peripheral, let c = controlChar else {
+            print("Write failed: missing peripheral or characteristic")
+            return
+        }
+
+        print("Sending:", bytes)
         p.writeValue(Data(bytes), for: c, type: .withResponse)
     }
 }
 
-// MARK: - Central Manager Delegate
+// MARK: - Central Delegate
 
 extension BLEManager: CBCentralManagerDelegate {
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         if central.state == .poweredOn {
             statusText = "Scanning"
-           
-            // ✅ FIX: scan for ALL devices (not filtered)
+            print("BLE ON → Scanning")
+
+            // ✅ Scan everything
             central.scanForPeripherals(withServices: nil)
         } else {
             statusText = "Bluetooth not available"
+            print("Bluetooth state:", central.state.rawValue)
         }
     }
 
@@ -75,26 +86,33 @@ extension BLEManager: CBCentralManagerDelegate {
                         advertisementData: [String : Any],
                         rssi RSSI: NSNumber) {
 
-        // ✅ DEBUG: see all devices found
-        print("Found:", p.name ?? "Unknown")
+        let name = p.name ?? "nil"
+        let advName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "nil"
 
-        // ✅ Only connect to GhostRunner
-        guard p.name == "GhostRunner" else { return }
+        print("Found device | name:", name, "| adv:", advName)
 
-        // Prevent multiple connections
-        guard peripheral == nil else { return }
+        // ✅ Robust matching (critical fix)
+        if name.contains("GhostRunner") || advName.contains("GhostRunner") {
 
-        peripheral = p
-        p.delegate = self
+            // prevent re-connecting loop
+            if peripheral != nil { return }
 
-        central.stopScan()
+            print("Matched GhostRunner → connecting")
 
-        statusText = "Connecting"
-        central.connect(p)
+            peripheral = p
+            p.delegate = self
+
+            central.stopScan()
+            statusText = "Connecting"
+
+            central.connect(p)
+        }
     }
 
     func centralManager(_ central: CBCentralManager,
                         didConnect p: CBPeripheral) {
+
+        print("Connected to GhostRunner")
 
         isConnected = true
         statusText = "Connected"
@@ -103,29 +121,49 @@ extension BLEManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager,
+                        didFailToConnect p: CBPeripheral,
+                        error: Error?) {
+
+        print("Failed to connect:", error?.localizedDescription ?? "unknown")
+
+        peripheral = nil
+        isConnected = false
+        statusText = "Retrying"
+
+        central.scanForPeripherals(withServices: nil)
+    }
+
+    func centralManager(_ central: CBCentralManager,
                         didDisconnectPeripheral p: CBPeripheral,
                         error: Error?) {
 
-        isConnected = false
+        print("Disconnected")
+
+        peripheral = nil
         isReady = false
         controlChar = nil
         triggerChar = nil
 
+        isConnected = false
         statusText = "Reconnecting"
 
-        central.connect(p)
+        central.scanForPeripherals(withServices: nil)
     }
 }
 
 // MARK: - Peripheral Delegate
 
 extension BLEManager: CBPeripheralDelegate {
-    
+
     func peripheral(_ p: CBPeripheral,
                     didDiscoverServices error: Error?) {
-        
+
+        print("Services discovered")
+
         p.services?.forEach { service in
             if service.uuid == Self.serviceUUID {
+                print("Found GhostRunner service")
+
                 p.discoverCharacteristics(
                     [Self.controlUUID, Self.triggerUUID],
                     for: service
@@ -133,41 +171,44 @@ extension BLEManager: CBPeripheralDelegate {
             }
         }
     }
-    
+
     func peripheral(_ p: CBPeripheral,
                     didDiscoverCharacteristicsFor service: CBService,
                     error: Error?) {
-        
+
+        print("Characteristics discovered")
+
         service.characteristics?.forEach {
-            
+
             if $0.uuid == Self.controlUUID {
                 controlChar = $0
+                print("Control characteristic ready")
             }
-            
+
             if $0.uuid == Self.triggerUUID {
                 triggerChar = $0
-                
-                // Enable notifications
+                print("Trigger characteristic ready")
+
                 p.setNotifyValue(true, for: $0)
             }
         }
-        
-        // ✅ Ready once both are found
+
         if controlChar != nil && triggerChar != nil {
             isReady = true
-            print("BLE Ready")
+            print("BLE FULLY READY")
         }
     }
-    
+
     func peripheral(_ p: CBPeripheral,
                     didUpdateValueFor characteristic: CBCharacteristic,
                     error: Error?) {
-        
+
         guard characteristic.uuid == Self.triggerUUID,
               let data = characteristic.value,
               data.first == 0x01 else { return }
-        
-        // HIT received
+
+        print("HIT received")
+
         hitPublisher.send()
     }
 }
