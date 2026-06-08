@@ -1,17 +1,21 @@
 //
-//  Ghost_Runner_1_0App.swift
-//  Ghost Runner 1.0
-//
-//  Created by Alexander del Rio on 4/3/26.
+//  GhostRunnerApp.swift
+//  Ghost Runner
 //
 
 import SwiftUI
 
 @main
-struct Ghost_Runner_1_0App: App {
+struct GhostRunnerApp: App {
+
+    @StateObject private var ble   = BLEManager()
+    @StateObject private var sound = SoundPlayer()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(ble)
+                .environmentObject(sound)
         }
     }
 }
