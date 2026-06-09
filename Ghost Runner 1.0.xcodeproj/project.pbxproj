@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		7711AC6D2FD880BF00701F1E /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7711AC6C2FD880BF00701F1E /* Info.plist */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		7764DF022F80B9290066D061 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -29,7 +25,6 @@
 
 /* Begin PBXFileReference section */
 		77031ABE2FD7CCBB00E9BA34 /* Ghost Runner 1.0.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Ghost Runner 1.0.xctestplan"; sourceTree = "<group>"; };
-		7711AC6C2FD880BF00701F1E /* Info.plist */ = {isa = PBXFileReference; explicitFileType = text.xml; path = Info.plist; sourceTree = SOURCE_ROOT; };
 		7764DEF42F80B9270066D061 /* Ghost Runner 1.0.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ghost Runner 1.0.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7764DF012F80B9290066D061 /* Ghost Runner 1.0Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Ghost Runner 1.0Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7764DF0B2F80B9290066D061 /* Ghost Runner 1.0UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Ghost Runner 1.0UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,7 +76,6 @@
 		7764DEEB2F80B9260066D061 = {
 			isa = PBXGroup;
 			children = (
-				7711AC6C2FD880BF00701F1E /* Info.plist */,
 				77031ABE2FD7CCBB00E9BA34 /* Ghost Runner 1.0.xctestplan */,
 				7764DEF62F80B9270066D061 /* Ghost Runner 1.0 */,
 				7764DF042F80B9290066D061 /* Ghost Runner 1.0Tests */,
@@ -220,7 +214,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7711AC6D2FD880BF00701F1E /* Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
