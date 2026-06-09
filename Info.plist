@@ -1,0 +1,7 @@
+//
+//  Info.plist
+//  Ghost Runner 1.0
+//
+//  Created by Alexander del Rio on 6/8/26.
+<key>NSBluetoothAlwaysUsageDescription</key>
+<string>This app requires Bluetooth to connect to Ghost runner impact sensor</string>

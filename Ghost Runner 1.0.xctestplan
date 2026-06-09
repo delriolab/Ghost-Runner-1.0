@@ -1,0 +1,38 @@
+{
+  "configurations" : [
+    {
+      "id" : "4A824620-5ECF-40C0-B10C-21C3FF7A1D11",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:Ghost Runner 1.0.xcodeproj",
+      "identifier" : "7764DEF32F80B9270066D061",
+      "name" : "Ghost Runner 1.0"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Ghost Runner 1.0.xcodeproj",
+        "identifier" : "7764DF002F80B9290066D061",
+        "name" : "Ghost Runner 1.0Tests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:Ghost Runner 1.0.xcodeproj",
+        "identifier" : "7764DF0A2F80B9290066D061",
+        "name" : "Ghost Runner 1.0UITests"
+      }
+    }
+  ],
+  "version" : 1
+}

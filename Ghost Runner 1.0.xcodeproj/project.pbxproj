@@ -24,6 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		77031ABE2FD7CCBB00E9BA34 /* Ghost Runner 1.0.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Ghost Runner 1.0.xctestplan"; sourceTree = "<group>"; };
 		7764DEF42F80B9270066D061 /* Ghost Runner 1.0.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ghost Runner 1.0.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7764DF012F80B9290066D061 /* Ghost Runner 1.0Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Ghost Runner 1.0Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7764DF0B2F80B9290066D061 /* Ghost Runner 1.0UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Ghost Runner 1.0UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +76,7 @@
 		7764DEEB2F80B9260066D061 = {
 			isa = PBXGroup;
 			children = (
+				77031ABE2FD7CCBB00E9BA34 /* Ghost Runner 1.0.xctestplan */,
 				7764DEF62F80B9270066D061 /* Ghost Runner 1.0 */,
 				7764DF042F80B9290066D061 /* Ghost Runner 1.0Tests */,
 				7764DF0E2F80B9290066D061 /* Ghost Runner 1.0UITests */,
@@ -393,7 +395,9 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/adelrio/Documents/Ghost Runner/ghostrunner1/Ghost Runner 1.0/Info.plist";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app requires Bluetooth to connect to Ghost runner impact sensor";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -435,7 +439,9 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/adelrio/Documents/Ghost Runner/ghostrunner1/Ghost Runner 1.0/Info.plist";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app requires Bluetooth to connect to Ghost runner impact sensor";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -520,8 +526,10 @@
 		7764DF1C2F80B9290066D061 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6FSRWN8YR7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 				MACOSX_DEPLOYMENT_TARGET = 26.3;
@@ -544,8 +552,10 @@
 		7764DF1D2F80B9290066D061 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6FSRWN8YR7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 				MACOSX_DEPLOYMENT_TARGET = 26.3;
