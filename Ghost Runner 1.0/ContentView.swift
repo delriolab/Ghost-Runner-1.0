@@ -79,18 +79,24 @@ struct ContentView: View {
     
     func startTimer() {
         stopTimer()
+        // Fix the buzz time against the real clock so late or skipped ticks can't add drift
+        let endTime = Date().addingTimeInterval(selectedDelay)
         remainingTime = selectedDelay
         timerRunning = true
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            remainingTime -= 0.1
+
+        let newTimer = Timer(timeInterval: 0.01, repeats: true) { _ in
+            remainingTime = max(0, endTime.timeIntervalSinceNow)
             if remainingTime <= 0 {
                 stopTimer()
                 SoundPlayer.shared.play()
             }
         }
+        newTimer.tolerance = 0
+        // .common keeps the timer firing while the UI is tracking touches
+        RunLoop.main.add(newTimer, forMode: .common)
+        timer = newTimer
     }
-    
+
     func stopTimer() {
         timer?.invalidate()
         timer = nil
