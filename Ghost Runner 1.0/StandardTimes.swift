@@ -59,7 +59,7 @@ enum StandardTimes {
     static let softball = SportTimes(
         categoryLabel: "Age group",
         categories: ["8U–10U", "11U–12U", "13U–14U", "High school", "College/elite"],
-        defaultCategory: "13U–14U",
+        defaultCategory: "High school",
         drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home"],
         times: [
             "8U–10U": [
