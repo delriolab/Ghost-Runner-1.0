@@ -17,6 +17,9 @@ struct Ghost_Runner_1_0App: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // Always dark; white keeps system controls (back button, toolbar) off the accent blue
+                .preferredColorScheme(.dark)
+                .tint(.white)
                 .onAppear {
                     // Keep the screen awake while the app is open
                     UIApplication.shared.isIdleTimerDisabled = true
