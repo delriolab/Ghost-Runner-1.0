@@ -20,6 +20,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     private let rxCharacteristicUUID = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
     
     private var incomingBuffer = ""
+    
+    // Last delay the app asked for, re-sent whenever the write channel becomes ready
+    private var currentDelay: Double?
 
     override init() {
         super.init()
@@ -39,6 +42,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     }
     
     func sendDelay(_ seconds: Double) {
+        currentDelay = seconds
         // Formats to "T=4.1" to match Andy's script command parsing
         sendStringCommand(String(format: "T=%.2f", seconds))
     }
@@ -104,6 +108,11 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             } else if characteristic.uuid == rxCharacteristicUUID {
                 rxCharacteristic = characteristic
             }
+        }
+        
+        // Write channel is ready: bring the sensor up to date with the selected delay
+        if rxCharacteristic != nil, let delay = currentDelay {
+            sendDelay(delay)
         }
     }
     
