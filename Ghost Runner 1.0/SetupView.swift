@@ -98,10 +98,10 @@ struct SetupView: View {
             } label: {
                 Text(monitoring ? "Stop" : "Start")
                     .font(.title2.bold())
-                    .foregroundStyle(startDisabled ? Theme.label : Theme.text)
+                    .foregroundStyle(startDisabled ? Theme.label : (monitoring ? Theme.onAlert : Theme.onAccent))
                     .frame(maxWidth: .infinity, minHeight: 60)
                     .background(
-                        monitoring ? Theme.disconnected : (startDisabled ? Theme.card : Theme.accent),
+                        monitoring ? Theme.alert : (startDisabled ? Theme.card : Theme.accent),
                         in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
                     )
             }
@@ -144,7 +144,8 @@ private struct PickerRow: View {
     }
 }
 
-/// Routine / Pressure / Hair on fire: the selected option is a blue pill, the rest gray text.
+/// Routine / Pressure / Hair on fire: the selected option is a filled pill, the rest gray text.
+/// Hair on fire uses the alert red, as on the website's preset cards.
 private struct IntensityControl: View {
     @Binding var selection: Intensity
 
@@ -152,16 +153,17 @@ private struct IntensityControl: View {
         HStack(spacing: 4) {
             ForEach(Intensity.allCases) { level in
                 let selected = level == selection
+                let hot = level == .hairOnFire
                 Button {
                     selection = level
                 } label: {
                     Text(level.title)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(selected ? Theme.text : Theme.label)
+                        .foregroundStyle(selected ? (hot ? Theme.onAlert : Theme.onAccent) : Theme.label)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(selected ? Theme.accent : Color.clear, in: Capsule())
+                        .background(selected ? (hot ? Theme.alert : Theme.accent) : Color.clear, in: Capsule())
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)

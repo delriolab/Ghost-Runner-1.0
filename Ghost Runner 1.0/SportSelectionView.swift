@@ -23,7 +23,7 @@ struct SportSelectionView: View {
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.title2.weight(.bold))
-                                .foregroundStyle(Theme.accentBright)
+                                .foregroundStyle(Theme.accent)
                         }
                         .padding(.leading, 24)
                         .padding(.trailing, 20)
@@ -41,13 +41,13 @@ struct SportSelectionView: View {
     }
 }
 
-/// Bordered card with a blue left edge that brightens and shrinks slightly while pressed.
+/// Bordered card with an accent-colored left edge that brightens and shrinks slightly while pressed.
 private struct SportCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
         configuration.label
-            .background(configuration.isPressed ? Theme.sportCardPressed : Theme.sportCard)
-            .overlay(shape.strokeBorder(Theme.sportCardBorder, lineWidth: 1.5))
+            .background(configuration.isPressed ? Theme.cardPressed : Theme.card)
+            .overlay(shape.strokeBorder(Theme.divider, lineWidth: 1.5))
             .overlay(alignment: .leading) {
                 Theme.accent.frame(width: 4)
             }
