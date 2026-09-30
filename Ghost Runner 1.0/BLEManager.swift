@@ -31,6 +31,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     // Last delay the app asked for, re-sent whenever the write channel becomes ready
     private var currentDelay: Double?
 
+    // True between Start and Stop, so START is re-sent if the sensor sleeps and reconnects mid-drill
+    private var shouldMonitor = false
+
     override init() {
         super.init()
         self.centralManager = CBCentralManager(delegate: self, queue: nil)
@@ -39,13 +42,20 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     // MARK: - App to Sensor Commands
     
     func startMonitoring() {
+        shouldMonitor = true
         sendStringCommand("START")
-        connectionStatus = "Connected: Monitoring"
+        // Only claim to be monitoring once the sensor can actually hear the command
+        if rxCharacteristic != nil {
+            connectionStatus = "Connected: Monitoring"
+        }
     }
     
     func stopMonitoring() {
+        shouldMonitor = false
         sendStringCommand("STOP")
-        connectionStatus = "Connected: Idle"
+        if rxCharacteristic != nil {
+            connectionStatus = "Connected: Idle"
+        }
     }
     
     func sendDelay(_ seconds: Double) {
@@ -128,9 +138,15 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             }
         }
         
-        // Write channel is ready: bring the sensor up to date with the selected delay
-        if service.uuid == uartServiceUUID, rxCharacteristic != nil, let delay = currentDelay {
-            sendDelay(delay)
+        // Write channel is ready: bring the sensor up to date with the selected delay,
+        // then resume a drill that was running before the sensor slept or dropped out
+        if service.uuid == uartServiceUUID, rxCharacteristic != nil {
+            if let delay = currentDelay {
+                sendDelay(delay)
+            }
+            if shouldMonitor {
+                startMonitoring()
+            }
         }
     }
     
