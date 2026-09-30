@@ -11,6 +11,7 @@ struct SetupView: View {
     let remainingTime: Double
     let timerRunning: Bool
     let connectionStatus: String
+    let batteryLevel: Int?
     let monitoring: Bool
 
     let onStart: () -> Void
@@ -36,7 +37,7 @@ struct SetupView: View {
             VStack(spacing: 24) {
                 HStack {
                     Spacer()
-                    SensorPill(status: connectionStatus)
+                    SensorPill(status: connectionStatus, batteryLevel: batteryLevel)
                 }
 
                 VStack(spacing: 0) {
@@ -175,9 +176,34 @@ private struct IntensityControl: View {
     }
 }
 
-/// Small status pill: green when connected, amber while searching, red when off.
+/// How the sensor battery is shown: an SF Symbol for the level, and red at or below 20%.
+enum BatteryDisplay {
+    static let lowThreshold = 20
+
+    static func symbol(for percent: Int) -> String {
+        switch percent {
+        case ..<13: return "battery.0percent"
+        case ..<38: return "battery.25percent"
+        case ..<63: return "battery.50percent"
+        case ..<88: return "battery.75percent"
+        default: return "battery.100percent"
+        }
+    }
+
+    static func isLow(_ percent: Int) -> Bool {
+        percent <= lowThreshold
+    }
+}
+
+/// Small status pill: green when connected, amber while searching, red when off, plus battery level when known.
 private struct SensorPill: View {
     let status: String
+    let batteryLevel: Int?
+
+    // Battery only means something while connected
+    private var battery: Int? {
+        status.hasPrefix("Connected") ? batteryLevel : nil
+    }
 
     // Maps BLEManager's connectionStatus strings to a dot color and short label
     private var state: (color: Color, text: String) {
@@ -199,11 +225,29 @@ private struct SensorPill: View {
             Text(state.text)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.text)
+
+            if let battery {
+                let color = BatteryDisplay.isLow(battery) ? Theme.alert : Theme.label
+                Image(systemName: BatteryDisplay.symbol(for: battery))
+                    .font(.caption)
+                    .foregroundStyle(color)
+                    .padding(.leading, 4)
+                Text("\(battery)%")
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Theme.card, in: Capsule())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Sensor: \(state.text)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        guard let battery else { return "Sensor: \(state.text)" }
+        let low = BatteryDisplay.isLow(battery) ? ", low" : ""
+        return "Sensor: \(state.text), battery \(battery) percent\(low)"
     }
 }

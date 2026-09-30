@@ -6,6 +6,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
     @Published var connectionStatus: String = "Disconnected"
     
+    // Sensor battery percent from the standard BLE Battery Service; nil when unknown or disconnected
+    @Published var batteryLevel: Int?
+    
     // This feeds your ContentView's .onReceive listener instantly
     let triggerPublisher = PassthroughSubject<Void, Never>()
     
@@ -18,6 +21,10 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     private let uartServiceUUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
     private let txCharacteristicUUID = CBUUID(string: "6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
     private let rxCharacteristicUUID = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    
+    // Standard BLE Battery Service used by Adafruit's BatteryService
+    private let batteryServiceUUID = CBUUID(string: "180F")
+    private let batteryLevelUUID = CBUUID(string: "2A19")
     
     private var incomingBuffer = ""
     
@@ -79,13 +86,14 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         connectionStatus = "Connected: Idle"
-        peripheral.discoverServices([uartServiceUUID])
+        peripheral.discoverServices([uartServiceUUID, batteryServiceUUID])
     }
     
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         discoveredPeripheral = nil
         txCharacteristic = nil
         rxCharacteristic = nil
+        batteryLevel = nil
         connectionStatus = "Disconnected. Reconnecting..."
         centralManager.scanForPeripherals(withServices: [uartServiceUUID], options: nil)
     }
@@ -94,8 +102,12 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard let services = peripheral.services else { return }
-        for service in services where service.uuid == uartServiceUUID {
-            peripheral.discoverCharacteristics([txCharacteristicUUID, rxCharacteristicUUID], for: service)
+        for service in services {
+            if service.uuid == uartServiceUUID {
+                peripheral.discoverCharacteristics([txCharacteristicUUID, rxCharacteristicUUID], for: service)
+            } else if service.uuid == batteryServiceUUID {
+                peripheral.discoverCharacteristics([batteryLevelUUID], for: service)
+            }
         }
     }
     
@@ -107,16 +119,35 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                 txCharacteristic = characteristic
             } else if characteristic.uuid == rxCharacteristicUUID {
                 rxCharacteristic = characteristic
+            } else if characteristic.uuid == batteryLevelUUID {
+                // Read the current level now, then get notified whenever the sensor updates it
+                peripheral.readValue(for: characteristic)
+                if characteristic.properties.contains(.notify) {
+                    peripheral.setNotifyValue(true, for: characteristic)
+                }
             }
         }
         
         // Write channel is ready: bring the sensor up to date with the selected delay
-        if rxCharacteristic != nil, let delay = currentDelay {
+        if service.uuid == uartServiceUUID, rxCharacteristic != nil, let delay = currentDelay {
             sendDelay(delay)
         }
     }
     
+    /// Battery Level (0x2A19) is one unsigned byte, 0–100 percent.
+    static func batteryPercent(from data: Data?) -> Int? {
+        guard let byte = data?.first else { return nil }
+        return min(Int(byte), 100)
+    }
+    
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        if characteristic.uuid == batteryLevelUUID {
+            if error == nil, let percent = Self.batteryPercent(from: characteristic.value) {
+                batteryLevel = percent
+            }
+            return
+        }
+        
         guard characteristic.uuid == txCharacteristicUUID, let data = characteristic.value else { return }
         guard let chunk = String(data: data, encoding: .utf8) else { return }
         

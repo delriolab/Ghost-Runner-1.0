@@ -3,6 +3,7 @@
 //  Ghost Runner 1.0Tests
 //
 
+import Foundation
 import Testing
 @testable import Ghost_Runner_1_0
 
@@ -38,5 +39,34 @@ struct StandardTimesTests {
         let times = StandardTimes.table(for: sport)
         #expect(times.categories.contains(times.defaultCategory))
         #expect(times.drills.contains(StandardTimes.defaultDrill))
+    }
+}
+
+struct BatteryTests {
+
+    @Test func readsBatteryLevelByte() {
+        #expect(BLEManager.batteryPercent(from: Data([82])) == 82)
+        #expect(BLEManager.batteryPercent(from: Data([0])) == 0)
+        #expect(BLEManager.batteryPercent(from: Data([100])) == 100)
+    }
+
+    @Test func clampsOutOfRangeAndIgnoresEmptyValues() {
+        #expect(BLEManager.batteryPercent(from: Data([255])) == 100)
+        #expect(BLEManager.batteryPercent(from: Data()) == nil)
+        #expect(BLEManager.batteryPercent(from: nil) == nil)
+    }
+
+    @Test func lowBatteryAtOrBelowTwentyPercent() {
+        #expect(BatteryDisplay.isLow(20))
+        #expect(BatteryDisplay.isLow(5))
+        #expect(!BatteryDisplay.isLow(21))
+    }
+
+    @Test func symbolTracksLevel() {
+        #expect(BatteryDisplay.symbol(for: 5) == "battery.0percent")
+        #expect(BatteryDisplay.symbol(for: 25) == "battery.25percent")
+        #expect(BatteryDisplay.symbol(for: 50) == "battery.50percent")
+        #expect(BatteryDisplay.symbol(for: 80) == "battery.75percent")
+        #expect(BatteryDisplay.symbol(for: 100) == "battery.100percent")
     }
 }

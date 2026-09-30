@@ -35,6 +35,7 @@ struct ContentView: View {
                         remainingTime: remainingTime,
                         timerRunning: timerRunning,
                         connectionStatus: bleManager.connectionStatus,
+                        batteryLevel: bleManager.batteryLevel,
                         monitoring: monitoring,
                         onStart: start,
                         onStop: stop,
