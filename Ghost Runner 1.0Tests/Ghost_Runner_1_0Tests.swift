@@ -70,3 +70,29 @@ struct BatteryTests {
         #expect(BatteryDisplay.symbol(for: 100) == "battery.100percent")
     }
 }
+
+struct CustomTimeTests {
+
+    @Test func stepsByFiveHundredths() {
+        #expect(CustomTime.adjusted(4.30, bySteps: 1) == 4.35)
+        #expect(CustomTime.adjusted(4.30, bySteps: -1) == 4.25)
+        #expect(CustomTime.adjusted(4.30, bySteps: -6) == 4.00)
+    }
+
+    @Test func snapsOffStepValuesToTheNearestStep() {
+        #expect(CustomTime.adjusted(4.32, bySteps: 0) == 4.30)
+        #expect(CustomTime.adjusted(4.33, bySteps: 0) == 4.35)
+    }
+
+    @Test func staysWithinRange() {
+        #expect(CustomTime.adjusted(CustomTime.range.lowerBound, bySteps: -1) == CustomTime.range.lowerBound)
+        #expect(CustomTime.adjusted(CustomTime.range.upperBound, bySteps: 1) == CustomTime.range.upperBound)
+        #expect(CustomTime.adjusted(0, bySteps: 0) == CustomTime.range.lowerBound)
+    }
+
+    @Test func batteryWarningAtOrBelowFifteenPercent() {
+        #expect(BatteryDisplay.needsWarning(15))
+        #expect(BatteryDisplay.needsWarning(3))
+        #expect(!BatteryDisplay.needsWarning(16))
+    }
+}

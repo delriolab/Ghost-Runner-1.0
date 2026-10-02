@@ -9,6 +9,8 @@ struct ContentView: View {
     @AppStorage("softballCategory") private var softballCategory = ""
     @AppStorage("drill") private var savedDrill = StandardTimes.defaultDrill
     @AppStorage("intensity") private var intensity: Intensity = .routine
+    @AppStorage("customTimeEnabled") private var customTimeEnabled = false
+    @AppStorage("customTime") private var customTime: Double = 0
 
     @State private var path: [Sport]
     @State private var monitoring = false
@@ -31,6 +33,8 @@ struct ContentView: View {
                         category: categoryBinding(for: sport),
                         drill: drillBinding(for: sport),
                         intensity: $intensity,
+                        customTimeEnabled: customTimeEnabledBinding,
+                        customTime: $customTime,
                         selectedTime: selectedTime,
                         remainingTime: remainingTime,
                         timerRunning: timerRunning,
@@ -61,6 +65,10 @@ struct ContentView: View {
         .onReceive(bleManager.triggerPublisher) { _ in
             startTimer()
         }
+        // Vibrate when the countdown reaches zero (not when Stop cancels it), for noisy fields
+        .sensoryFeedback(.warning, trigger: timerRunning) { wasRunning, isRunning in
+            wasRunning && !isRunning && remainingTime <= 0
+        }
     }
 
     // MARK: - Selection
@@ -69,12 +77,33 @@ struct ContentView: View {
         path.last ?? Sport(rawValue: savedSport) ?? .baseball
     }
 
+    /// The coach's custom time when it's switched on, otherwise the standard time from the table
     private var selectedTime: Double? {
+        if customTimeEnabled, customTime > 0 {
+            return customTime
+        }
+        return standardTime
+    }
+
+    private var standardTime: Double? {
         StandardTimes.time(
             sport: currentSport,
             category: category(for: currentSport),
             drill: drill(for: currentSport),
             intensity: intensity
+        )
+    }
+
+    /// Turning custom time on the first time starts the dial from the current standard time
+    private var customTimeEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { customTimeEnabled },
+            set: { isOn in
+                if isOn, customTime <= 0 {
+                    customTime = CustomTime.adjusted(standardTime ?? 4.0, bySteps: 0)
+                }
+                customTimeEnabled = isOn
+            }
         )
     }
 

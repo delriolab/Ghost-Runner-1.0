@@ -126,6 +126,21 @@ enum StandardTimes {
     }
 }
 
+// MARK: - Custom time
+
+/// Limits for the time a coach can dial in instead of using the table.
+enum CustomTime {
+    static let range: ClosedRange<Double> = 1.0...20.0
+    static let step = 0.05
+
+    /// Moves `value` by whole steps, snapped to the step and kept in range.
+    static func adjusted(_ value: Double, bySteps steps: Int) -> Double {
+        let snapped = ((value / step).rounded() + Double(steps)) * step
+        let clamped = min(max(snapped, range.lowerBound), range.upperBound)
+        return (clamped * 100).rounded() / 100
+    }
+}
+
 // MARK: - Types
 
 enum Sport: String, CaseIterable, Identifiable, Hashable {
