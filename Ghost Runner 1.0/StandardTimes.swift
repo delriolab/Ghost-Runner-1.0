@@ -5,7 +5,7 @@ import Foundation
 // Every countdown the app can run comes from this file.
 // Each entry is t(Routine, Pressure, Hair on fire) in seconds.
 //
-// To change a time, edit the number. To add a field size, age group, or drill,
+// To change a time, edit the number. To add an age group or drill,
 // add its name to that sport's list and give it a row in the table.
 // The unit tests check that every combination has a time.
 
@@ -13,40 +13,49 @@ enum StandardTimes {
     static let defaultDrill = "Home to 1st"
 
     static let baseball = SportTimes(
-        categoryLabel: "Field size",
-        categories: ["40/60 (7U–8U)", "46/65 (9U–10U)", "50/70 (11U–12U)", "60/90 (High school)", "60/90 (College/pro)"],
-        defaultCategory: "60/90 (High school)",
+        categoryLabel: "Age group",
+        categories: ["7U–8U (40/60)", "9U–10U (46/65)", "11U–12U (50/70)", "13U (54/80)", "High school (60/90)", "College/pro (60/90)"],
+        defaultCategory: "High school (60/90)",
         drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home"],
         times: [
-            "40/60 (7U–8U)": [
+            "7U–8U (40/60)": [
                 "Home to 1st": t(4.4, 4.2, 4.0),
                 "Home to 2nd": t(7.7, 7.4, 7.1),
                 "Home to 3rd": t(12.4, 12.0, 11.6),
                 "2nd to Home": t(6.8, 6.4, 6.0),
                 "3rd to Home": t(3.5, 3.3, 3.1),
             ],
-            "46/65 (9U–10U)": [
+            "9U–10U (46/65)": [
                 "Home to 1st": t(4.2, 4.0, 3.8),
                 "Home to 2nd": t(7.5, 7.2, 6.9),
                 "Home to 3rd": t(12.0, 11.6, 11.2),
                 "2nd to Home": t(6.5, 6.2, 5.9),
                 "3rd to Home": t(3.3, 3.1, 2.9),
             ],
-            "50/70 (11U–12U)": [
+            "11U–12U (50/70)": [
                 "Home to 1st": t(4.3, 4.1, 3.9),
                 "Home to 2nd": t(7.6, 7.3, 7.0),
                 "Home to 3rd": t(12.1, 11.7, 11.3),
                 "2nd to Home": t(6.6, 6.3, 5.9),
                 "3rd to Home": t(3.4, 3.2, 3.0),
             ],
-            "60/90 (High school)": [
+            // 13U: Home to 1st Routine 4.4 is the standard. The other times are estimates
+            // (11U–12U times scaled by 4.4/4.3), accepted for now; revise if they prove off.
+            "13U (54/80)": [
+                "Home to 1st": t(4.4, 4.2, 4.0),
+                "Home to 2nd": t(7.8, 7.5, 7.2),
+                "Home to 3rd": t(12.4, 12.0, 11.6),
+                "2nd to Home": t(6.8, 6.4, 6.0),
+                "3rd to Home": t(3.5, 3.3, 3.1),
+            ],
+            "High school (60/90)": [
                 "Home to 1st": t(4.3, 4.1, 3.9),
                 "Home to 2nd": t(7.7, 7.4, 7.1),
                 "Home to 3rd": t(12.2, 11.8, 11.4),
                 "2nd to Home": t(6.6, 6.3, 6.0),
                 "3rd to Home": t(3.4, 3.2, 3.0),
             ],
-            "60/90 (College/pro)": [
+            "College/pro (60/90)": [
                 "Home to 1st": t(4.2, 4.0, 3.8),
                 "Home to 2nd": t(7.4, 7.1, 6.8),
                 "Home to 3rd": t(11.7, 11.3, 10.9),
@@ -158,7 +167,7 @@ struct TimeSet {
 }
 
 struct SportTimes {
-    /// Row title on the setup screen, e.g. "Field size" or "Age group"
+    /// Row title on the setup screen, e.g. "Age group"
     let categoryLabel: String
     let categories: [String]
     let defaultCategory: String

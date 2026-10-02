@@ -82,7 +82,7 @@ struct ContentView: View {
         selectedTime ?? 0
     }
 
-    /// The saved field size / age group for a sport, or its default if the saved one no longer exists
+    /// The saved age group for a sport, or its default if the saved one no longer exists
     private func category(for sport: Sport) -> String {
         let times = StandardTimes.table(for: sport)
         let saved = sport == .baseball ? baseballCategory : softballCategory
