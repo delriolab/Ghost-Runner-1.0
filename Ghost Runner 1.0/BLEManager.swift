@@ -9,8 +9,15 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     // Sensor battery percent from the standard BLE Battery Service; nil when unknown or disconnected
     @Published var batteryLevel: Int?
     
+    // Game Break: the puck has acknowledged GAME, or never did after several tries
+    @Published var gameModeConfirmed = false
+    @Published var gameModeFailed = false
+    
     // This feeds your ContentView's .onReceive listener instantly
     let triggerPublisher = PassthroughSubject<Void, Never>()
+    
+    // Game Break taps ("HIT:<ms>"), kept separate from the normal HIT above
+    let gameTapPublisher = PassthroughSubject<GameTap, Never>()
     
     private var centralManager: CBCentralManager!
     private var discoveredPeripheral: CBPeripheral?
@@ -33,6 +40,13 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
 
     // True between Start and Stop, so START is re-sent if the sensor sleeps and reconnects mid-drill
     private var shouldMonitor = false
+    
+    // True while the Game Break screens are open; GAME is re-sent after every reconnect
+    private var wantsGameMode = false
+    private var gameModeRetry: DispatchWorkItem?
+    private var gameModeAttempts = 0
+    private static let gameModeMaxAttempts = 3
+    private static let gameModeRetryDelay = 2.0
 
     override init() {
         super.init()
@@ -72,6 +86,60 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         }
     }
     
+    // MARK: - Game Break Commands
+    
+    func enterGameMode() {
+        wantsGameMode = true
+        requestGameMode()
+    }
+    
+    func exitGameMode() {
+        wantsGameMode = false
+        cancelGameModeRetry()
+        gameModeConfirmed = false
+        gameModeFailed = false
+        sendStringCommand("NORMAL")
+    }
+    
+    /// Sends GAME and retries until the puck answers MODE:GAME
+    private func requestGameMode() {
+        cancelGameModeRetry()
+        gameModeConfirmed = false
+        gameModeFailed = false
+        gameModeAttempts = 0
+        // Without a write channel yet, this runs again once the sensor connects
+        guard rxCharacteristic != nil else { return }
+        sendGameCommand()
+    }
+    
+    private func sendGameCommand() {
+        gameModeAttempts += 1
+        sendStringCommand("GAME")
+        let retry = DispatchWorkItem { [weak self] in
+            guard let self, self.wantsGameMode, !self.gameModeConfirmed, self.rxCharacteristic != nil else { return }
+            if self.gameModeAttempts < Self.gameModeMaxAttempts {
+                self.sendGameCommand()
+            } else {
+                self.gameModeFailed = true
+            }
+        }
+        gameModeRetry = retry
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.gameModeRetryDelay, execute: retry)
+    }
+    
+    private func cancelGameModeRetry() {
+        gameModeRetry?.cancel()
+        gameModeRetry = nil
+    }
+    
+    private func handleModeAck(_ line: String) {
+        // A late MODE:GAME after leaving Game Break is ignored
+        guard line == "MODE:GAME", wantsGameMode else { return }
+        cancelGameModeRetry()
+        gameModeConfirmed = true
+        gameModeFailed = false
+    }
+    
     // MARK: - CBCentralManagerDelegate
     
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -104,6 +172,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         txCharacteristic = nil
         rxCharacteristic = nil
         batteryLevel = nil
+        gameModeConfirmed = false
+        gameModeFailed = false
+        cancelGameModeRetry()
         connectionStatus = "Disconnected. Reconnecting..."
         centralManager.scanForPeripherals(withServices: [uartServiceUUID], options: nil)
     }
@@ -147,6 +218,10 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             if shouldMonitor {
                 startMonitoring()
             }
+            // The puck drops back to NORMAL on disconnect, so ask for Game mode again
+            if wantsGameMode {
+                requestGameMode()
+            }
         }
     }
     
@@ -174,6 +249,19 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
             let parts = incomingBuffer.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
             let line = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
             incomingBuffer = parts.count > 1 ? String(parts[1]) : ""
+            
+            // Game Break: taps stamped with the puck's clock, and mode acknowledgements
+            if line.hasPrefix("HIT:") {
+                let tap = GameTap(puckMs: Int(line.dropFirst(4)), receivedAt: .now)
+                DispatchQueue.main.async {
+                    self.gameTapPublisher.send(tap)
+                }
+                continue
+            }
+            if line.hasPrefix("MODE:") {
+                handleModeAck(line)
+                continue
+            }
             
             // Listen exactly for Andy's "HIT" log token
             if line.hasPrefix("HIT") {

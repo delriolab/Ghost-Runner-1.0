@@ -14,6 +14,7 @@ struct ContentView: View {
 
     @State private var path: [Sport]
     @State private var monitoring = false
+    @State private var showGameBreak = false
     @State private var remainingTime: Double = 0
     @State private var timerRunning = false
     @State private var timer: Timer?
@@ -26,7 +27,10 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            SportSelectionView()
+            SportSelectionView(onGameBreak: { showGameBreak = true })
+                .navigationDestination(isPresented: $showGameBreak) {
+                    GameBreakHomeView(bleManager: bleManager)
+                }
                 .navigationDestination(for: Sport.self) { sport in
                     SetupView(
                         sport: sport,
@@ -63,7 +67,17 @@ struct ContentView: View {
             bleManager.sendDelay(newValue)
         }
         .onReceive(bleManager.triggerPublisher) { _ in
+            // Game Break has its own taps; never run the training countdown there
+            guard !showGameBreak else { return }
             startTimer()
+        }
+        // The puck switches to Game Break taps only while those screens are open
+        .onChange(of: showGameBreak) { _, isOpen in
+            if isOpen {
+                bleManager.enterGameMode()
+            } else {
+                bleManager.exitGameMode()
+            }
         }
         // Vibrate when the countdown reaches zero (not when Stop cancels it), for noisy fields
         .sensoryFeedback(.warning, trigger: timerRunning) { wasRunning, isRunning in

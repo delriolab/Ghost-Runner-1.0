@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// Screen 1: pick Baseball or Softball.
+/// Screen 1: pick Baseball, Softball, or Game Break Challenge.
 struct SportSelectionView: View {
+    var onGameBreak: () -> Void = {}
+
     var body: some View {
         VStack(spacing: 0) {
             // Upper half: logo centered
@@ -31,6 +33,24 @@ struct SportSelectionView: View {
                     }
                     .buttonStyle(SportCardButtonStyle())
                 }
+
+                Button(action: onGameBreak) {
+                    HStack(alignment: .center) {
+                        Text("Game Break Challenge")
+                            .font(.title2.weight(.heavy))
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(Theme.accent)
+                    }
+                    .padding(.leading, 24)
+                    .padding(.trailing, 20)
+                    .frame(maxWidth: .infinity, minHeight: 80)
+                }
+                .buttonStyle(SportCardButtonStyle())
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -42,7 +62,7 @@ struct SportSelectionView: View {
 }
 
 /// Bordered card with an accent-colored left edge that brightens and shrinks slightly while pressed.
-private struct SportCardButtonStyle: ButtonStyle {
+struct SportCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
         configuration.label

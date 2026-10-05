@@ -243,7 +243,7 @@ enum BatteryDisplay {
 }
 
 /// Small status pill: green when connected, amber while searching, red when off, plus battery level when known.
-private struct SensorPill: View {
+struct SensorPill: View {
     let status: String
     let batteryLevel: Int?
 
