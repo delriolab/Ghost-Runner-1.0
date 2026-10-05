@@ -58,6 +58,20 @@
 
 # NO DEEP SLEEP IS USED.
 
+#
+
+# GAME BREAK (only while the app asks for it):
+
+#   app sends GAME   -> finger-tap detection, reply MODE:GAME
+
+#   each tap sends HIT:<ms> stamped with the puck's own clock
+
+#   app sends NORMAL -> back to 12 g hits, reply MODE:NORMAL
+
+#   boot, disconnect and sleep always return to NORMAL
+
+#   sleep waits 5 minutes instead of 30 seconds
+
 # ============================================================
 
 
@@ -77,6 +91,8 @@ import busio
 import alarm
 
 import microcontroller
+
+import supervisor
 
 
 
@@ -153,6 +169,40 @@ SLEEP_AFTER_S = 30.0
 # Movement needed to reset inactivity timer
 
 ACTIVITY_CHANGE_G = 0.35
+
+
+
+
+
+# ============================================================
+
+# GAME BREAK MODE
+
+# ============================================================
+
+
+
+# Finger-tap detection, modeled on the first-use activation taps.
+
+# Only used after the app sends GAME; normal hits are unchanged.
+
+GAME_TAP_G = 3.0
+
+GAME_REARM_G = 1.40
+
+GAME_MIN_INTERVAL_S = 0.25
+
+
+
+# Kids pause between turns, so Game mode waits longer before sleeping
+
+GAME_SLEEP_AFTER_S = 300.0
+
+
+
+# How often to check for app commands (keeps the hit loop fast)
+
+COMMAND_POLL_S = 0.05
 
 
 
@@ -1919,6 +1969,136 @@ def update_awake_led(now):
 
 # ============================================================
 
+# GAME BREAK COMMANDS
+
+# ============================================================
+
+#
+
+# The app sends one command per line over BLE UART.
+
+# GAME and NORMAL switch modes and are acknowledged.
+
+# Anything else (the app's START / STOP / T= lines) is ignored,
+
+# exactly as before. Game mode is never stored in NVM.
+
+
+
+game_mode = False
+
+game_tap_armed = True
+
+last_game_tap_time = -GAME_MIN_INTERVAL_S
+
+command_buffer = b""
+
+last_command_check = time.monotonic()
+
+sample_ms = 0
+
+
+
+
+
+def send_line(text):
+
+    try:
+
+        uart.write((text + "\n").encode())
+
+    except Exception as error:
+
+        print("BLE send error:", error)
+
+
+
+
+
+def set_game_mode(enabled):
+
+    global game_mode, game_tap_armed, last_game_tap_time
+
+    if enabled != game_mode:
+
+        print("Mode:", "GAME" if enabled else "NORMAL")
+
+    game_mode = enabled
+
+    # Every Game session starts armed for a fresh first tap
+
+    game_tap_armed = True
+
+    last_game_tap_time = -GAME_MIN_INTERVAL_S
+
+
+
+
+
+def handle_command(line):
+
+    if line == b"GAME":
+
+        set_game_mode(True)
+
+        send_line("MODE:GAME")
+
+    elif line == b"NORMAL":
+
+        set_game_mode(False)
+
+        send_line("MODE:NORMAL")
+
+
+
+
+
+def poll_commands():
+
+    # Reads only bytes that have already arrived, so it never waits
+
+    global command_buffer
+
+    try:
+
+        waiting = uart.in_waiting
+
+        if not waiting:
+
+            return
+
+        data = uart.read(waiting)
+
+    except Exception as error:
+
+        print("BLE read error:", error)
+
+        return
+
+    if not data:
+
+        return
+
+    command_buffer += data
+
+    while b"\n" in command_buffer:
+
+        line, command_buffer = command_buffer.split(b"\n", 1)
+
+        handle_command(line.strip())
+
+    # Drop runaway input that never ends a line
+
+    if len(command_buffer) > 64:
+
+        command_buffer = b""
+
+
+
+
+
+# ============================================================
+
 # RUNTIME STATE
 
 # ============================================================
@@ -2057,6 +2237,14 @@ while True:
 
 
 
+        # Never stay in Game mode without the app
+
+        set_game_mode(False)
+
+        command_buffer = b""
+
+
+
 
 
     was_connected = (
@@ -2064,6 +2252,24 @@ while True:
         connected
 
     )
+
+
+
+    if (
+
+        connected
+
+        and
+
+        now - last_command_check
+
+        >= COMMAND_POLL_S
+
+    ):
+
+        last_command_check = now
+
+        poll_commands()
 
 
 
@@ -2112,6 +2318,14 @@ while True:
         )
 
     )
+
+
+
+    # Game Break taps are timed from the moment this sample was read
+
+    if game_mode:
+
+        sample_ms = supervisor.ticks_ms()
 
 
 
@@ -2179,51 +2393,13 @@ while True:
 
 
 
-    delta_g = abs(
-
-        current_magnitude - 1.0
-
-    )
+    if not game_mode:
 
 
 
+        delta_g = abs(
 
-
-    cooldown_finished = (
-
-        now - last_hit_time
-
-        >= HIT_COOLDOWN_S
-
-    )
-
-
-
-
-
-    if (
-
-        cooldown_finished
-
-        and
-
-        delta_g >= THRESH_G
-
-    ):
-
-
-
-        last_hit_time = (
-
-            now
-
-        )
-
-
-
-        last_activity_time = (
-
-            now
+            current_magnitude - 1.0
 
         )
 
@@ -2231,17 +2407,11 @@ while True:
 
 
 
-        print(
+        cooldown_finished = (
 
-            "HIT!",
+            now - last_hit_time
 
-            "magnitude:",
-
-            current_magnitude,
-
-            "delta:",
-
-            delta_g
+            >= HIT_COOLDOWN_S
 
         )
 
@@ -2249,57 +2419,161 @@ while True:
 
 
 
-        blink(
+        if (
 
-            2,
+            cooldown_finished
 
-            0.04,
+            and
 
-            0.04
+            delta_g >= THRESH_G
 
-        )
-
-
+        ):
 
 
 
-        if connected:
+            last_hit_time = (
+
+                now
+
+            )
 
 
 
-            try:
+            last_activity_time = (
 
+                now
 
-
-                uart.write(
-
-                    b"HIT\n"
-
-                )
-
-
-
-                print(
-
-                    "Sent: HIT"
-
-                )
+            )
 
 
 
 
 
-            except Exception as error:
+            print(
+
+                "HIT!",
+
+                "magnitude:",
+
+                current_magnitude,
+
+                "delta:",
+
+                delta_g
+
+            )
 
 
 
-                print(
 
-                    "BLE send error:",
 
-                    error
+            blink(
 
-                )
+                2,
+
+                0.04,
+
+                0.04
+
+            )
+
+
+
+
+
+            if connected:
+
+
+
+                try:
+
+
+
+                    uart.write(
+
+                        b"HIT\n"
+
+                    )
+
+
+
+                    print(
+
+                        "Sent: HIT"
+
+                    )
+
+
+
+
+
+                except Exception as error:
+
+
+
+                    print(
+
+                        "BLE send error:",
+
+                        error
+
+                    )
+
+
+
+    else:
+
+
+
+        # GAME BREAK TAP DETECTION
+
+        # Same trigger / settle / rearm idea as the activation taps.
+
+        # The tap is stamped with the puck's own millisecond clock.
+
+        if (
+
+            game_tap_armed
+
+            and
+
+            current_magnitude >= GAME_TAP_G
+
+            and
+
+            now - last_game_tap_time
+
+            >= GAME_MIN_INTERVAL_S
+
+        ):
+
+            game_tap_armed = False
+
+            last_game_tap_time = now
+
+            last_activity_time = now
+
+            if connected:
+
+                send_line("HIT:" + str(sample_ms))
+
+            print("TAP!", "magnitude:", current_magnitude, "ms:", sample_ms)
+
+            blink(1, 0.025, 0)
+
+
+
+        if (
+
+            not game_tap_armed
+
+            and
+
+            current_magnitude <= GAME_REARM_G
+
+        ):
+
+            game_tap_armed = True
 
 
 
@@ -2323,11 +2597,19 @@ while True:
 
 
 
+    sleep_after_s = (
+
+        GAME_SLEEP_AFTER_S if game_mode else SLEEP_AFTER_S
+
+    )
+
+
+
     if (
 
         inactivity
 
-        >= SLEEP_AFTER_S
+        >= sleep_after_s
 
     ):
 
@@ -2416,6 +2698,14 @@ while True:
 
 
         was_connected = False
+
+
+
+        # Sleep dropped the app connection: wake up in NORMAL
+
+        set_game_mode(False)
+
+        command_buffer = b""
 
 
 
