@@ -166,8 +166,37 @@ struct GameBreakEngineTests {
         #expect(engine.phase == .result(GameAttempt(elapsedMs: 4173)))
         engine.handleTap(tap(9000))                         // ignored while showing the result
         #expect(engine.phase == .result(GameAttempt(elapsedMs: 4173)))
-        engine.nextTry()
+        #expect(engine.autoAdvanceAt != nil)                // next try starts on its own
+        engine.acceptResult()
         #expect(engine.phase == .ready)
+        #expect(engine.autoAdvanceAt == nil)
+    }
+
+    @Test func doubleTapRightAfterTheStartIsIgnored() {
+        let engine = GameBreakEngine()
+        engine.updateAvailability(connected: true, confirmed: true, failed: false, simulated: false)
+        engine.handleTap(tap(1000))
+        engine.handleTap(tap(1080))                         // bounce
+        engine.handleTap(tap(2499))                         // still inside the 1.5 s lockout
+        #expect(engine.phase == .timing)
+        engine.handleTap(tap(5200))
+        #expect(engine.phase == .result(GameAttempt(elapsedMs: 4200)))
+    }
+
+    @Test func acceptedAttemptsAreReportedButRedoneOnesAreNot() {
+        let engine = GameBreakEngine()
+        var accepted: [GameAttempt] = []
+        engine.onAttemptAccepted = { accepted.append($0) }
+        engine.updateAvailability(connected: true, confirmed: true, failed: false, simulated: false)
+
+        engine.handleTap(tap(0)); engine.handleTap(tap(1900))   // accidental early stop
+        engine.redo()
+        #expect(engine.phase == .ready)
+        #expect(accepted.isEmpty)
+
+        engine.handleTap(tap(10_000)); engine.handleTap(tap(14_190))
+        engine.acceptResult()
+        #expect(accepted == [GameAttempt(elapsedMs: 4190)])
     }
 
     @Test func resetCancelsAnAccidentalStart() {
@@ -202,14 +231,14 @@ struct TournamentTests {
         t.record(attempt(errors[t.players[turn.player]]!))
     }
 
-    @Test func qualifyingRotatesThroughTheLineup() {
+    @Test func eachPlayerTakesAllThreeQualifyingTriesInARow() {
         var t = Tournament(players: ["A", "B", "C"])
         var order: [String] = []
-        for _ in 0..<6 {
+        for _ in 0..<9 {
             order.append(t.players[t.currentTurn!.player])
             t.record(attempt(10))
         }
-        #expect(order == ["A", "B", "C", "A", "B", "C"])
+        #expect(order == ["A", "A", "A", "B", "B", "B", "C", "C", "C"])
     }
 
     @Test func topFourSeedIntoSemifinalsByMeanAbsoluteError() {
@@ -225,12 +254,12 @@ struct TournamentTests {
     @Test func earlyAndLateDoNotCancelOut() {
         // 100 early then 100 late averages 100 off, not 0
         var t = Tournament(players: ["Swing", "Steady"])
-        let plan = [("Swing", -100), ("Steady", 30), ("Swing", 100), ("Steady", -30), ("Swing", 0), ("Steady", 30)]
-        for (_, e) in plan { t.record(attempt(e)) }
+        for e in [-100, 100, 0] { t.record(attempt(e)) }      // Swing: averages 0 signed, 67 ms off
+        for e in [30, -30, 30] { t.record(attempt(e)) }       // Steady: 30 ms off
         #expect(t.standings.first.map { t.players[$0.player] } == "Steady")
     }
 
-    @Test func semifinalsAlternateAndChampionshipIsFiveEach() {
+    @Test func semifinalPlayersTakeTheirTriesInARowAndChampionshipIsFiveEach() {
         let errors = ["A": 5, "B": 10, "C": 15, "D": 20]
         var t = Tournament(players: ["A", "B", "C", "D"])
         for _ in 0..<12 { play(&t, errors) }
@@ -239,7 +268,7 @@ struct TournamentTests {
             semiOrder.append(t.players[t.currentTurn!.player])
             play(&t, errors)
         }
-        #expect(semiOrder == ["A", "D", "A", "D", "A", "D"])
+        #expect(semiOrder == ["A", "A", "A", "D", "D", "D"])
         for _ in 0..<6 { play(&t, errors) }
         #expect(t.championship?.attemptsEach == 5)
         for _ in 0..<10 { play(&t, errors) }
@@ -264,8 +293,8 @@ struct TournamentTests {
     @Test func tieForFourthGoesToBestAttemptThenSuddenDeath() {
         // D and E tie on average and best attempt for the last spot
         var t = Tournament(players: ["A", "B", "C", "D", "E"])
-        let rounds: [[Int]] = [[1, 2, 3, 10, 10], [1, 2, 3, 20, 20], [1, 2, 3, 30, 30]]
-        for round in rounds { for e in round { t.record(attempt(e)) } }
+        let tries: [[Int]] = [[1, 1, 1], [2, 2, 2], [3, 3, 3], [10, 20, 30], [10, 20, 30]]
+        for player in tries { for e in player { t.record(attempt(e)) } }
         #expect(t.playoff != nil)
         #expect(t.currentTurn?.stage == "Playoff")
         t.record(attempt(50))                                   // D
@@ -281,5 +310,23 @@ struct TournamentTests {
         let loaded = try JSONDecoder().decode(Tournament.self, from: data)
         #expect(loaded == t)
         #expect(loaded.currentTurn == t.currentTurn)
+    }
+}
+
+
+@MainActor
+struct TournamentStoreTests {
+
+    @Test func redoLastAttemptGivesThePlayerTheirTurnBack() {
+        let store = TournamentStore()
+        store.start(players: ["A", "B"])
+        store.record(GameAttempt(elapsedMs: 4210))
+        store.record(GameAttempt(elapsedMs: 2900))            // accidental tap
+        #expect(store.tournament?.qualifying[0].count == 2)
+        store.undoLastAttempt()
+        #expect(store.tournament?.qualifying[0] == [GameAttempt(elapsedMs: 4210)])
+        #expect(store.tournament?.currentTurn?.detail == "Attempt 2 of 3")
+        #expect(store.beforeLastAttempt == nil)              // one step back only
+        store.end()
     }
 }

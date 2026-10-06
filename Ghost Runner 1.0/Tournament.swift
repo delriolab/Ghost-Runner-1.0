@@ -3,12 +3,13 @@ import Combine
 
 // MARK: - Game Break tournament
 //
-// Qualifying: 3 attempts each, taken in rotation through the lineup, ranked
-// by mean absolute error from 4.200 s (best single attempt breaks ties, then
-// sudden death). Top 4 play semifinals (#1 v #4, #2 v #3, 3 attempts each,
-// alternating); the winners play a 5-attempt championship. With 2-3 players
-// the top 2 go straight to the championship. Any tied match goes to sudden
-// death: one attempt each per round until one is closer.
+// Each player takes all their attempts in a row, then passes the puck.
+// Qualifying: 3 attempts each, ranked by mean absolute error from 4.200 s
+// (best single attempt breaks ties, then sudden death). Top 4 play
+// semifinals (#1 v #4, #2 v #3, 3 attempts each); the winners play a
+// 5-attempt championship. With 2-3 players the top 2 go straight to the
+// championship. Any tied match goes to sudden death: one attempt each,
+// back and forth, until one is closer.
 
 struct Tournament: Codable, Equatable {
     static let qualifyingAttempts = 3
@@ -52,13 +53,11 @@ struct Tournament: Codable, Equatable {
     }
 
     private var qualifyingTurn: Turn? {
-        let taken = qualifying.reduce(0) { $0 + $1.count }
-        let total = players.count * Self.qualifyingAttempts
-        guard taken < total, !players.isEmpty else { return nil }
-        let round = taken / players.count
-        return Turn(player: taken % players.count,
+        // All of one player's attempts, then the next player
+        guard let player = qualifying.firstIndex(where: { $0.count < Self.qualifyingAttempts }) else { return nil }
+        return Turn(player: player,
                     stage: "Qualifying",
-                    detail: "Round \(round + 1) of \(Self.qualifyingAttempts)")
+                    detail: "Attempt \(qualifying[player].count + 1) of \(Self.qualifyingAttempts)")
     }
 
     var isFinished: Bool { champion != nil }
@@ -191,8 +190,8 @@ struct Match: Codable, Equatable {
     func nextTurn(stage: String) -> Tournament.Turn? {
         guard winner == nil else { return nil }
         if !regulationDone {
-            // Alternate A, B, A, B ...
-            let player = aAttempts.count <= bAttempts.count ? a : b
+            // All of A's attempts, then all of B's
+            let player = aAttempts.count < attemptsEach ? a : b
             let number = (player == a ? aAttempts.count : bAttempts.count) + 1
             return Tournament.Turn(player: player, stage: stage, detail: "Attempt \(number) of \(attemptsEach)")
         }
@@ -268,6 +267,33 @@ final class TournamentStore: ObservableObject {
 
     @Published var tournament: Tournament? {
         didSet { save() }
+    }
+
+    /// The tournament as it was before the last recorded attempt, for "Redo last attempt"
+    @Published private(set) var beforeLastAttempt: Tournament?
+
+    func start(players: [String]) {
+        beforeLastAttempt = nil
+        tournament = Tournament(players: players)
+    }
+
+    func end() {
+        beforeLastAttempt = nil
+        tournament = nil
+    }
+
+    func record(_ attempt: GameAttempt) {
+        guard var current = tournament else { return }
+        beforeLastAttempt = current
+        current.record(attempt)
+        tournament = current
+    }
+
+    /// Takes back the last attempt; that player gets the turn again
+    func undoLastAttempt() {
+        guard let previous = beforeLastAttempt else { return }
+        tournament = previous
+        beforeLastAttempt = nil
     }
 
     init() {

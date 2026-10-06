@@ -189,18 +189,23 @@ struct GameBreakPlayArea: View {
 
         case .result(let attempt):
             if let player { playerLine(player, color: Theme.onAlert) }
-            Text(GameBreakScoring.seconds(attempt.elapsedMs))
-                .font(.system(size: 76, weight: .bold))
+            // The score is what the kids look for, so it's the biggest thing on screen
+            Text(attempt.isPerfect ? "PERFECT" : "SCORE")
+                .font(attempt.isPerfect ? .title.weight(.heavy) : .headline.weight(.heavy))
+                .tracking(2)
+                .foregroundStyle(Theme.onAlert)
+            Text("\(attempt.score)")
+                .font(.system(size: 132, weight: .heavy))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .foregroundStyle(Theme.onAlert)
-            Text(deltaText(attempt))
-                .font(.title3.weight(.heavy))
+            Text("\(GameBreakScoring.seconds(attempt.elapsedMs)) s · \(deltaText(attempt))")
+                .font(.title2.weight(.bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .foregroundStyle(Theme.onAlert)
-            Text(attempt.isPerfect ? "PERFECT · 100" : "SCORE \(attempt.score)")
-                .font(.headline.weight(.bold))
-                .foregroundStyle(Theme.onAlert.opacity(0.85))
 
         case .notReady(let reason):
             notReady(reason)
@@ -275,12 +280,12 @@ private struct GameButton: View {
     }
 }
 
-/// Reset while timing, the next button after a result, and the developer tap simulator.
+/// Reset while timing; Redo or Next after a result (Next also happens on its own);
+/// and the developer tap simulator.
 private struct GameControls: View {
     @ObservedObject var engine: GameBreakEngine
     let nextTitle: String
     let simulateTaps: Bool
-    let onNext: () -> Void
 
     var body: some View {
         VStack(spacing: 10) {
@@ -288,7 +293,12 @@ private struct GameControls: View {
             case .timing:
                 GameButton(title: "Reset") { engine.reset() }
             case .result:
-                GameButton(title: nextTitle, primary: true, action: onNext)
+                HStack(spacing: 10) {
+                    GameButton(title: "Redo") { engine.redo() }
+                    TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                        GameButton(title: nextLabel(at: context.date), primary: true) { engine.acceptResult() }
+                    }
+                }
             default:
                 EmptyView()
             }
@@ -302,6 +312,13 @@ private struct GameControls: View {
         .padding(.top, 8)
         .padding(.bottom, 8)
         .background(Theme.background)   // keeps scrolling lists from showing through
+    }
+
+    /// "NEXT TRY · 4"
+    private func nextLabel(at now: Date) -> String {
+        guard let deadline = engine.autoAdvanceAt else { return nextTitle }
+        let seconds = max(1, Int(deadline.timeIntervalSince(now).rounded(.up)))
+        return "\(nextTitle) · \(seconds)"
     }
 }
 
@@ -333,17 +350,16 @@ struct FreePlayView: View {
         .navigationTitle("Free Play")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
-            GameControls(engine: engine, nextTitle: "NEXT TRY", simulateTaps: simulateTaps) {
-                engine.nextTry()
-            }
+            GameControls(engine: engine, nextTitle: "NEXT TRY", simulateTaps: simulateTaps)
         }
-        .onChange(of: engine.phase) { _, phase in
-            if case .result(let attempt) = phase { attempts.append(attempt) }
+        .onAppear {
+            engine.onAttemptAccepted = { attempts.append($0) }
         }
         .onDisappear {
             // Leave a clean slate for the next screen
             engine.reset()
-            engine.nextTry()
+            engine.acceptResult()
+            engine.onAttemptAccepted = nil
         }
     }
 }
@@ -413,7 +429,7 @@ private struct TournamentSetupView: View {
                 }
                 .listRowBackground(Theme.card)
             } footer: {
-                Text("Everyone gets 3 tries at 4.200. The 4 closest on average play the Final Four.")
+                Text("Each player takes 3 tries in a row, then passes the puck. The 4 closest on average play the Final Four.")
                     .foregroundStyle(Theme.label)
             }
 
@@ -446,7 +462,7 @@ private struct TournamentSetupView: View {
         }
         .safeAreaInset(edge: .bottom) {
             GameButton(title: "Start tournament", primary: true) {
-                store.tournament = Tournament(players: names)
+                store.start(players: names)
             }
             .disabled(names.count < Tournament.minimumPlayers)
             .opacity(names.count < Tournament.minimumPlayers ? 0.4 : 1)
@@ -507,6 +523,10 @@ private struct TournamentPlayView: View {
                         } label: {
                             Label("Bracket", systemImage: "list.number")
                         }
+                        Button("Redo last attempt", systemImage: "arrow.uturn.backward") {
+                            redoLastAttempt()
+                        }
+                        .disabled(!canRedo)
                         Button("End tournament", systemImage: "xmark.circle", role: .destructive) {
                             confirmEnd = true
                         }
@@ -516,19 +536,24 @@ private struct TournamentPlayView: View {
             .confirmationDialog("End this tournament?", isPresented: $confirmEnd, titleVisibility: .visible) {
                 Button("End tournament", role: .destructive) {
                     engine.reset()
-                    engine.nextTry()
-                    store.tournament = nil
+                    engine.redo()
+                    store.end()
                 }
             } message: {
                 Text("All scores will be cleared.")
             }
             .safeAreaInset(edge: .bottom) {
-                GameControls(engine: engine, nextTitle: "NEXT", simulateTaps: simulateTaps, onNext: recordAndAdvance)
+                GameControls(engine: engine, nextTitle: "NEXT", simulateTaps: simulateTaps)
+            }
+            .onAppear {
+                // Each accepted attempt counts for whoever's turn it is
+                engine.onAttemptAccepted = { store.record($0) }
             }
             .onDisappear {
-                // Don't lose a finished attempt if the screen closes before NEXT
-                if case .result = engine.phase { recordAndAdvance() }
+                // Don't lose a finished attempt if the screen closes before it's accepted
+                engine.acceptResult()
                 engine.reset()
+                engine.onAttemptAccepted = nil
             }
         }
     }
@@ -540,11 +565,19 @@ private struct TournamentPlayView: View {
         return tournament.championship
     }
 
-    /// The attempt counts for the player whose turn it was, then the next player is up
-    private func recordAndAdvance() {
-        guard case .result(let attempt) = engine.phase else { return }
-        store.tournament?.record(attempt)
-        engine.nextTry()
+    private var canRedo: Bool {
+        if case .result = engine.phase { return true }
+        return store.beforeLastAttempt != nil
+    }
+
+    /// A result on screen is simply thrown away; otherwise the last recorded attempt is taken back
+    private func redoLastAttempt() {
+        if case .result = engine.phase {
+            engine.redo()
+        } else {
+            engine.reset()
+            store.undoLastAttempt()
+        }
     }
 }
 
@@ -730,8 +763,11 @@ private struct ChampionView: View {
             }
             .navigationTitle("Champion")
             .safeAreaInset(edge: .bottom) {
-                GameButton(title: "New tournament", primary: true) {
-                    store.tournament = nil
+                VStack(spacing: 10) {
+                    if store.beforeLastAttempt != nil {
+                        GameButton(title: "Redo last attempt") { store.undoLastAttempt() }
+                    }
+                    GameButton(title: "New tournament", primary: true) { store.end() }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)

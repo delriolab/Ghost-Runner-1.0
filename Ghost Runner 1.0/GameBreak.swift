@@ -63,10 +63,16 @@ enum GameBreakScoring {
 
 // MARK: - State machine
 
-/// READY (green) -> first tap -> TIMING (dark, nothing shown) -> second tap -> RESULT (red).
+/// READY (green) -> first tap -> TIMING (dark, nothing shown) -> second tap -> RESULT (red),
+/// then back to READY on its own so nobody has to touch the phone.
 /// Green only appears once the puck has confirmed Game mode.
 @MainActor
 final class GameBreakEngine: ObservableObject {
+    /// Taps this soon after the start are ignored (double taps, bounces)
+    static let stopLockoutMs = 1500
+    /// How long a result stays up before the next try starts automatically
+    static let resultHoldSeconds = 3.0
+
     enum NotReady: Equatable {
         case disconnected
         case confirming
@@ -82,8 +88,14 @@ final class GameBreakEngine: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .notReady(.disconnected)
+    /// When the current result will be accepted automatically
+    @Published private(set) var autoAdvanceAt: Date?
+
+    /// Called once per attempt that counts (not for Redo); the open screen sets this
+    var onAttemptAccepted: ((GameAttempt) -> Void)?
 
     private var startTap: GameTap?
+    private var autoAdvance: DispatchWorkItem?
     /// nil when the puck (or the simulator) is ready to play
     private var unavailable: NotReady? = .disconnected
 
@@ -110,7 +122,7 @@ final class GameBreakEngine: ObservableObject {
                 phase = .notReady(reason)
             }
         case .result:
-            break   // keep showing the result; NEXT TRY decides where to go
+            break   // keep showing the result; accepting or redoing decides where to go
         }
     }
 
@@ -121,11 +133,33 @@ final class GameBreakEngine: ObservableObject {
             phase = .timing
         case .timing:
             guard let start = startTap else { return }
+            let elapsed = Self.elapsedMs(from: start, to: tap)
+            // A double tap or bounce right after the start can't end the attempt
+            guard elapsed >= Self.stopLockoutMs else { return }
             startTap = nil
-            phase = .result(GameAttempt(elapsedMs: Self.elapsedMs(from: start, to: tap)))
+            showResult(GameAttempt(elapsedMs: elapsed))
         case .notReady, .result:
-            break
+            break   // taps while the result is showing are ignored
         }
+    }
+
+    private func showResult(_ attempt: GameAttempt) {
+        phase = .result(attempt)
+        let work = DispatchWorkItem { [weak self] in self?.acceptResult() }
+        autoAdvance = work
+        autoAdvanceAt = Date().addingTimeInterval(Self.resultHoldSeconds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.resultHoldSeconds, execute: work)
+    }
+
+    private func cancelAutoAdvance() {
+        autoAdvance?.cancel()
+        autoAdvance = nil
+        autoAdvanceAt = nil
+    }
+
+    private func leaveResult() {
+        cancelAutoAdvance()
+        phase = unavailable.map(Phase.notReady) ?? .ready
     }
 
     /// Cancels an accidental start
@@ -135,9 +169,17 @@ final class GameBreakEngine: ObservableObject {
         phase = .ready
     }
 
-    func nextTry() {
+    /// The attempt counts; on to the next try (also happens automatically after the hold)
+    func acceptResult() {
+        guard case .result(let attempt) = phase else { return }
+        leaveResult()
+        onAttemptAccepted?(attempt)
+    }
+
+    /// Throws the attempt away, e.g. after an accidental tap; the same player goes again
+    func redo() {
         guard case .result = phase else { return }
-        phase = unavailable.map(Phase.notReady) ?? .ready
+        leaveResult()
     }
 
     static func elapsedMs(from start: GameTap, to end: GameTap) -> Int {
