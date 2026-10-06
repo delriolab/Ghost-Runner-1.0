@@ -189,22 +189,14 @@ struct GameBreakPlayArea: View {
 
         case .result(let attempt):
             if let player { playerLine(player, color: Theme.onAlert) }
-            // The score is what the kids look for, so it's the biggest thing on screen
-            Text(attempt.isPerfect ? "PERFECT" : "SCORE")
-                .font(attempt.isPerfect ? .title.weight(.heavy) : .headline.weight(.heavy))
-                .tracking(2)
-                .foregroundStyle(Theme.onAlert)
-            Text("\(attempt.score)")
-                .font(.system(size: 132, weight: .heavy))
+            Text(GameBreakScoring.seconds(attempt.elapsedMs))
+                .font(.system(size: 76, weight: .bold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .foregroundStyle(Theme.onAlert)
-            Text("\(GameBreakScoring.seconds(attempt.elapsedMs)) s · \(deltaText(attempt))")
-                .font(.title2.weight(.bold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            Text(deltaText(attempt))
+                .font(.title3.weight(.heavy))
                 .foregroundStyle(Theme.onAlert)
 
         case .notReady(let reason):
@@ -252,6 +244,31 @@ struct GameBreakPlayArea: View {
             Text("The puck needs the Game Break firmware update.")
                 .font(.subheadline)
                 .foregroundStyle(Theme.label)
+        }
+    }
+}
+
+/// The score in big numbers under the red box; only shown with a result.
+struct GameBreakScore: View {
+    let phase: GameBreakEngine.Phase
+
+    var body: some View {
+        if case .result(let attempt) = phase {
+            VStack(spacing: 0) {
+                Text(attempt.isPerfect ? "PERFECT" : "SCORE")
+                    .font(attempt.isPerfect ? .title2.weight(.heavy) : .headline.weight(.heavy))
+                    .tracking(2)
+                    .foregroundStyle(attempt.isPerfect ? Theme.accent : Theme.label)
+                Text("\(attempt.score)")
+                    .font(.system(size: 120, weight: .heavy))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(attempt.isPerfect ? Theme.accent : Theme.text)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(attempt.isPerfect ? "Perfect, score \(attempt.score)" : "Score \(attempt.score)")
         }
     }
 }
@@ -334,6 +351,7 @@ struct FreePlayView: View {
             VStack(spacing: 20) {
                 TargetHeader()
                 GameBreakPlayArea(phase: engine.phase)
+                GameBreakScore(phase: engine.phase)
                 if let best = attempts.min(by: { $0.absErrorMs < $1.absErrorMs }) {
                     HStack {
                         SessionStat(title: "Tries", value: "\(attempts.count)")
@@ -503,6 +521,7 @@ private struct TournamentPlayView: View {
                     }
 
                     GameBreakPlayArea(phase: engine.phase, player: tournament.players[turn.player])
+                    GameBreakScore(phase: engine.phase)
 
                     if let match = currentMatch(tournament) {
                         MatchCard(match: match, players: tournament.players, title: turn.stage)
