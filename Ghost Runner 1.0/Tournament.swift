@@ -4,7 +4,7 @@ import Combine
 // MARK: - Game Break tournament
 //
 // Each player takes all their attempts in a row, then passes the puck.
-// Qualifying: 3 attempts each, ranked by mean absolute error from 4.200 s
+// Qualifying: 3 attempts each, ranked by mean absolute error from the target
 // (best single attempt breaks ties, then sudden death). Top 4 play
 // semifinals (#1 v #4, #2 v #3, 3 attempts each); the winners play a
 // 5-attempt championship. With 2-3 players the top 2 go straight to the

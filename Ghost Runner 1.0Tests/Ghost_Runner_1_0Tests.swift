@@ -97,6 +97,8 @@ struct CustomTimeTests {
     }
 }
 
+private let T = GameBreakScoring.targetMs
+
 struct GameBreakScoringTests {
 
     @Test func scoresMatchTheAgreedPoints() {
@@ -117,11 +119,11 @@ struct GameBreakScoringTests {
     }
 
     @Test func earlyAndLateScoreTheSame() {
-        #expect(GameAttempt(elapsedMs: 4173).score == GameAttempt(elapsedMs: 4227).score)
-        #expect(GameAttempt(elapsedMs: 4173).errorMs == -27)
-        #expect(GameAttempt(elapsedMs: 4236).errorMs == 36)
-        #expect(GameAttempt(elapsedMs: 4209).isPerfect)
-        #expect(!GameAttempt(elapsedMs: 4211).isPerfect)
+        #expect(GameAttempt(elapsedMs: (T - 27)).score == GameAttempt(elapsedMs: (T + 27)).score)
+        #expect(GameAttempt(elapsedMs: (T - 27)).errorMs == -27)
+        #expect(GameAttempt(elapsedMs: (T + 36)).errorMs == 36)
+        #expect(GameAttempt(elapsedMs: (T + 9)).isPerfect)
+        #expect(!GameAttempt(elapsedMs: (T + 11)).isPerfect)
     }
 
     @Test func puckClockElapsedHandlesWraparound() {
@@ -162,10 +164,10 @@ struct GameBreakEngineTests {
         engine.updateAvailability(connected: true, confirmed: true, failed: false, simulated: false)
         engine.handleTap(tap(3000))
         #expect(engine.phase == .timing)
-        engine.handleTap(tap(7173))
-        #expect(engine.phase == .result(GameAttempt(elapsedMs: 4173)))
+        engine.handleTap(tap(3000 + T - 27))
+        #expect(engine.phase == .result(GameAttempt(elapsedMs: (T - 27))))
         engine.handleTap(tap(9000))                         // ignored while showing the result
-        #expect(engine.phase == .result(GameAttempt(elapsedMs: 4173)))
+        #expect(engine.phase == .result(GameAttempt(elapsedMs: (T - 27))))
         #expect(engine.autoAdvanceAt != nil)                // next try starts on its own
         engine.acceptResult()
         #expect(engine.phase == .ready)
@@ -177,10 +179,10 @@ struct GameBreakEngineTests {
         engine.updateAvailability(connected: true, confirmed: true, failed: false, simulated: false)
         engine.handleTap(tap(1000))
         engine.handleTap(tap(1080))                         // bounce
-        engine.handleTap(tap(2499))                         // still inside the 1.5 s lockout
+        engine.handleTap(tap(1000 + GameBreakEngine.stopLockoutMs - 1))   // still inside the lockout
         #expect(engine.phase == .timing)
-        engine.handleTap(tap(5200))
-        #expect(engine.phase == .result(GameAttempt(elapsedMs: 4200)))
+        engine.handleTap(tap(1000 + T))
+        #expect(engine.phase == .result(GameAttempt(elapsedMs: T)))
     }
 
     @Test func acceptedAttemptsAreReportedButRedoneOnesAreNot() {
@@ -189,14 +191,14 @@ struct GameBreakEngineTests {
         engine.onAttemptAccepted = { accepted.append($0) }
         engine.updateAvailability(connected: true, confirmed: true, failed: false, simulated: false)
 
-        engine.handleTap(tap(0)); engine.handleTap(tap(1900))   // accidental early stop
+        engine.handleTap(tap(0)); engine.handleTap(tap(GameBreakEngine.stopLockoutMs + 400))   // accidental early stop
         engine.redo()
         #expect(engine.phase == .ready)
         #expect(accepted.isEmpty)
 
-        engine.handleTap(tap(10_000)); engine.handleTap(tap(14_190))
+        engine.handleTap(tap(10_000)); engine.handleTap(tap(10_000 + T - 10))
         engine.acceptResult()
-        #expect(accepted == [GameAttempt(elapsedMs: 4190)])
+        #expect(accepted == [GameAttempt(elapsedMs: (T - 10))])
     }
 
     @Test func resetCancelsAnAccidentalStart() {
@@ -206,8 +208,8 @@ struct GameBreakEngineTests {
         engine.reset()
         #expect(engine.phase == .ready)
         engine.handleTap(tap(500))
-        engine.handleTap(tap(4700))
-        #expect(engine.phase == .result(GameAttempt(elapsedMs: 4200)))
+        engine.handleTap(tap(500 + T))
+        #expect(engine.phase == .result(GameAttempt(elapsedMs: T)))
     }
 
     @Test func disconnectCancelsAnAttempt() {
@@ -223,7 +225,7 @@ struct GameBreakEngineTests {
 
 struct TournamentTests {
 
-    private func attempt(_ errorMs: Int) -> GameAttempt { GameAttempt(elapsedMs: 4200 + errorMs) }
+    private func attempt(_ errorMs: Int) -> GameAttempt { GameAttempt(elapsedMs: GameBreakScoring.targetMs + errorMs) }
 
     /// Plays the current turn with the error chosen for that player
     private func play(_ t: inout Tournament, _ errors: [String: Int]) {
@@ -320,11 +322,11 @@ struct TournamentStoreTests {
     @Test func redoLastAttemptGivesThePlayerTheirTurnBack() {
         let store = TournamentStore()
         store.start(players: ["A", "B"])
-        store.record(GameAttempt(elapsedMs: 4210))
+        store.record(GameAttempt(elapsedMs: (T + 10)))
         store.record(GameAttempt(elapsedMs: 2900))            // accidental tap
         #expect(store.tournament?.qualifying[0].count == 2)
         store.undoLastAttempt()
-        #expect(store.tournament?.qualifying[0] == [GameAttempt(elapsedMs: 4210)])
+        #expect(store.tournament?.qualifying[0] == [GameAttempt(elapsedMs: (T + 10))])
         #expect(store.tournament?.currentTurn?.detail == "Attempt 2 of 3")
         #expect(store.beforeLastAttempt == nil)              // one step back only
         store.end()

@@ -3,7 +3,7 @@ import Combine
 
 // MARK: - Game Break Challenge
 //
-// Tap the puck to start a hidden timer, tap again when you think 4.200 s has
+// Tap the puck to start a hidden timer, tap again when you think 4.000 s has
 // passed. Taps come from the puck as "HIT:<ms>", stamped with the puck's own
 // millisecond clock, so Bluetooth delays don't affect the measured time.
 
@@ -15,7 +15,7 @@ struct GameTap {
     let receivedAt: ContinuousClock.Instant
 }
 
-/// One timed attempt at the 4.200 s target.
+/// One timed attempt at the target time.
 struct GameAttempt: Codable, Equatable {
     let elapsedMs: Int
 
@@ -27,7 +27,8 @@ struct GameAttempt: Codable, Equatable {
 }
 
 enum GameBreakScoring {
-    static let targetMs = 4200
+    /// The time to hit. Change it here; every screen and score follows.
+    static let targetMs = 4000
     static let perfectMs = 10
 
     /// Score at each error (ms); straight lines in between, 0 beyond the last point.
@@ -55,6 +56,9 @@ enum GameBreakScoring {
         (end - start) & (puckClockPeriod - 1)
     }
 
+    /// "4.000"
+    static var targetText: String { seconds(targetMs) }
+
     /// "4.173"
     static func seconds(_ ms: Int) -> String {
         String(format: "%d.%03d", ms / 1000, ms % 1000)
@@ -69,7 +73,7 @@ enum GameBreakScoring {
 @MainActor
 final class GameBreakEngine: ObservableObject {
     /// Taps this soon after the start are ignored (double taps, bounces)
-    static let stopLockoutMs = 1500
+    static let stopLockoutMs = 2500
     /// How long a result stays up before the next try starts automatically
     static let resultHoldSeconds = 3.0
 

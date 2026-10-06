@@ -30,7 +30,7 @@ struct GameBreakHomeView: View {
                 NavigationLink {
                     FreePlayView(engine: engine, simulateTaps: simulateTaps)
                 } label: {
-                    ModeCardLabel(title: "Free Play", subtitle: "Tap to start, tap when you think 4.200 is up")
+                    ModeCardLabel(title: "Free Play", subtitle: "Tap to start, tap when you think \(GameBreakScoring.targetText) is up")
                 }
                 NavigationLink {
                     TournamentView(engine: engine, store: store, simulateTaps: simulateTaps)
@@ -102,7 +102,7 @@ private struct ModeCardLabel: View {
     }
 }
 
-/// "TARGET 4.200 s"
+/// "TARGET 4.000 s"
 private struct TargetHeader: View {
     var size: CGFloat = 56
 
@@ -113,7 +113,7 @@ private struct TargetHeader: View {
                 .tracking(1.5)
                 .foregroundStyle(Theme.label)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("4.200")
+                Text(GameBreakScoring.targetText)
                     .font(.system(size: size, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(Theme.text)
@@ -123,7 +123,7 @@ private struct TargetHeader: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Target 4.200 seconds")
+        .accessibilityLabel("Target \(GameBreakScoring.targetText) seconds")
     }
 }
 
@@ -211,7 +211,7 @@ struct GameBreakPlayArea: View {
     }
 
     private func deltaText(_ attempt: GameAttempt) -> String {
-        if attempt.errorMs == 0 { return "RIGHT ON 4.200" }
+        if attempt.errorMs == 0 { return "RIGHT ON \(GameBreakScoring.targetText)" }
         return "\(GameBreakScoring.seconds(attempt.absErrorMs)) \(attempt.errorMs < 0 ? "EARLY" : "LATE")"
     }
 
