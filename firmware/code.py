@@ -186,7 +186,7 @@ ACTIVITY_CHANGE_G = 0.35
 
 # Only used after the app sends GAME; normal hits are unchanged.
 
-GAME_TAP_G = 3.0
+GAME_TAP_G = 5.0
 
 GAME_REARM_G = 1.40
 
