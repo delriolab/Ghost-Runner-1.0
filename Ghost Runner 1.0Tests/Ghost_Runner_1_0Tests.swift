@@ -243,7 +243,7 @@ struct TournamentTests {
         #expect(order == ["A", "A", "A", "B", "B", "B", "C", "C", "C"])
     }
 
-    @Test func topFourSeedIntoSemifinalsByMeanAbsoluteError() {
+    @Test func topFourSeedIntoSemifinalsByAverageScore() {
         let errors = ["P1": 5, "P2": -12, "P3": 20, "P4": -30, "P5": 40, "P6": 80]
         var t = Tournament(players: ["P6", "P5", "P4", "P3", "P2", "P1"])
         for _ in 0..<18 { play(&t, errors) }
@@ -251,6 +251,16 @@ struct TournamentTests {
         #expect(t.semifinals.count == 2)
         #expect(t.players[t.semifinals[0].a] == "P1" && t.players[t.semifinals[0].b] == "P4")
         #expect(t.players[t.semifinals[1].a] == "P2" && t.players[t.semifinals[1].b] == "P3")
+    }
+
+    @Test func rankingUsesAverageScoreNotAverageTime() {
+        // Close: three 0.010 misses are all PERFECT 100s.
+        // Spotty: two exact hits and a 0.025 miss average 98.3, even though its average time is closer.
+        var t = Tournament(players: ["Spotty", "Close"])
+        for e in [0, 0, 25] { t.record(attempt(e)) }
+        for e in [10, -10, 10] { t.record(attempt(e)) }
+        #expect(t.standings.map { t.players[$0.player] } == ["Close", "Spotty"])
+        #expect(t.standings.first?.averageScore == 100)
     }
 
     @Test func earlyAndLateDoNotCancelOut() {
@@ -262,7 +272,7 @@ struct TournamentTests {
     }
 
     @Test func semifinalPlayersTakeTheirTriesInARowAndChampionshipIsFiveEach() {
-        let errors = ["A": 5, "B": 10, "C": 15, "D": 20]
+        let errors = ["A": 5, "B": 30, "C": 45, "D": 60]        // scores 100, 94, 91, 88
         var t = Tournament(players: ["A", "B", "C", "D"])
         for _ in 0..<12 { play(&t, errors) }
         var semiOrder: [String] = []

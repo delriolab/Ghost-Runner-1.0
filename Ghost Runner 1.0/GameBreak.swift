@@ -24,6 +24,15 @@ struct GameAttempt: Codable, Equatable {
     var absErrorMs: Int { abs(errorMs) }
     var score: Int { GameBreakScoring.score(absErrorMs: absErrorMs) }
     var isPerfect: Bool { absErrorMs <= GameBreakScoring.perfectMs }
+
+    /// Head-to-head comparison: higher score wins, the closer time breaks a tied score
+    func beats(_ other: GameAttempt) -> Bool {
+        score != other.score ? score > other.score : absErrorMs < other.absErrorMs
+    }
+
+    func ties(_ other: GameAttempt) -> Bool {
+        score == other.score && absErrorMs == other.absErrorMs
+    }
 }
 
 enum GameBreakScoring {

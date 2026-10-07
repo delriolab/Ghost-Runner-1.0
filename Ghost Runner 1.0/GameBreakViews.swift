@@ -309,7 +309,20 @@ private struct GameControls: View {
     let nextTitle: String
     let simulateTaps: Bool
 
+    /// Nothing to show while ready or not ready (unless simulating), so no bar at all
+    private var hasButtons: Bool {
+        if simulateTaps { return true }
+        switch engine.phase {
+        case .timing, .result: return true
+        default: return false
+        }
+    }
+
     var body: some View {
+        if hasButtons { buttons }
+    }
+
+    private var buttons: some View {
         VStack(spacing: 10) {
             switch engine.phase {
             case .timing:
@@ -333,6 +346,7 @@ private struct GameControls: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
         .background(Theme.background)   // keeps scrolling lists from showing through
     }
 
@@ -452,7 +466,7 @@ private struct TournamentSetupView: View {
                 }
                 .listRowBackground(Theme.card)
             } footer: {
-                Text("Each player takes 3 tries in a row, then passes the puck. The 4 closest on average play the Final Four.")
+                Text("Each player takes 3 tries in a row, then passes the puck. The 4 best average scores play the Final Four.")
                     .foregroundStyle(Theme.label)
             }
 
@@ -462,7 +476,9 @@ private struct TournamentSetupView: View {
                         Text("\(index + 1)")
                             .monospacedDigit()
                             .foregroundStyle(Theme.label)
-                            .frame(width: 28, alignment: .leading)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(minWidth: 28, alignment: .leading)
                         Text(name)
                             .foregroundStyle(Theme.text)
                     }
@@ -605,10 +621,6 @@ private struct TournamentPlayView: View {
     }
 }
 
-private func averageText(_ ms: Double?) -> String {
-    guard let ms else { return "—" }
-    return String(format: "%.3f", ms / 1000)
-}
 
 private struct StandingsList: View {
     let tournament: Tournament
@@ -618,7 +630,7 @@ private struct StandingsList: View {
             HStack {
                 SectionHeader("Qualifying")
                 Spacer()
-                Text("AVG ERROR")
+                Text("AVG SCORE")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(Theme.label)
                     .padding(.trailing, 16)
@@ -631,17 +643,21 @@ private struct StandingsList: View {
                             .font(.subheadline.weight(.heavy))
                             .monospacedDigit()
                             .foregroundStyle(advancing ? Theme.accent : Theme.label)
-                            .frame(width: 24)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(minWidth: 28)
                         Text(tournament.players[standing.player])
                             .font(.body.weight(.semibold))
                             .foregroundStyle(Theme.text)
                         Spacer()
                         AttemptDots(done: standing.attempts, total: Tournament.qualifyingAttempts)
-                        Text(averageText(standing.meanMs))
+                        Text(averageScoreText(standing.averageScore))
                             .font(.body.weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(Theme.text)
-                            .frame(width: 64, alignment: .trailing)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .frame(minWidth: 52, alignment: .trailing)
                     }
                     .padding(.horizontal, 16)
                     .frame(minHeight: 44)
@@ -649,7 +665,7 @@ private struct StandingsList: View {
                 }
             }
             .card()
-            Text("Top \(tournament.advancingCount) advance · early and late count the same")
+            Text("Top \(tournament.advancingCount) average scores advance")
                 .font(.footnote)
                 .foregroundStyle(Theme.label)
                 .padding(.horizontal, 16)
@@ -698,7 +714,7 @@ private struct MatchCard: View {
     }
 
     private func side(player: Int, attempts: [GameAttempt]) -> some View {
-        let mean = attempts.isEmpty ? nil : Double(attempts.map(\.absErrorMs).reduce(0, +)) / Double(attempts.count)
+        let average = attempts.isEmpty ? nil : Double(attempts.map(\.score).reduce(0, +)) / Double(attempts.count)
         let won = match.winner == player
         return VStack(spacing: 4) {
             Text(players[player])
@@ -706,7 +722,7 @@ private struct MatchCard: View {
                 .foregroundStyle(won ? Theme.accent : Theme.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            Text(averageText(mean))
+            Text(averageScoreText(average))
                 .font(.title2.weight(.bold))
                 .monospacedDigit()
                 .foregroundStyle(Theme.text)
@@ -750,7 +766,7 @@ private struct ChampionView: View {
     var body: some View {
         if let tournament = store.tournament, let champion = tournament.champion, let match = tournament.championship {
             let attempts = champion == match.a ? match.aAttempts : match.bAttempts
-            let mean = Double(attempts.map(\.absErrorMs).reduce(0, +)) / Double(max(attempts.count, 1))
+            let average = Double(attempts.map(\.score).reduce(0, +)) / Double(max(attempts.count, 1))
             let allAttempts = tournament.qualifying[champion] + attempts
             let closest = allAttempts.min { $0.absErrorMs < $1.absErrorMs }
 
@@ -769,7 +785,7 @@ private struct ChampionView: View {
                         .foregroundStyle(Theme.text)
                         .multilineTextAlignment(.center)
                     HStack {
-                        SessionStat(title: "Final avg error", value: averageText(mean))
+                        SessionStat(title: "Final avg score", value: averageScoreText(average))
                         if let closest {
                             SessionStat(title: "Closest try", value: GameBreakScoring.seconds(closest.elapsedMs))
                         }

@@ -4,12 +4,12 @@ import Combine
 // MARK: - Game Break tournament
 //
 // Each player takes all their attempts in a row, then passes the puck.
-// Qualifying: 3 attempts each, ranked by mean absolute error from the target
-// (best single attempt breaks ties, then sudden death). Top 4 play
+// Qualifying: 3 attempts each, ranked by average score (best single score
+// breaks ties, then sudden death). Top 4 play
 // semifinals (#1 v #4, #2 v #3, 3 attempts each); the winners play a
-// 5-attempt championship. With 2-3 players the top 2 go straight to the
-// championship. Any tied match goes to sudden death: one attempt each,
-// back and forth, until one is closer.
+// 5-attempt championship, each won by the higher average score. With 2-3
+// players the top 2 go straight to the championship. Any tied match goes
+// to sudden death: one attempt each, higher score (then closer time) wins.
 
 struct Tournament: Codable, Equatable {
     static let qualifyingAttempts = 3
@@ -98,28 +98,28 @@ struct Tournament: Codable, Equatable {
     struct Standing: Equatable {
         let player: Int
         let attempts: Int
-        /// Mean absolute error in ms, nil before the first attempt
-        let meanMs: Double?
-        let bestMs: Int?
+        /// Average score, nil before the first attempt
+        let averageScore: Double?
+        let bestScore: Int?
     }
 
-    /// Qualifying standings: closest average first; players without attempts last
+    /// Qualifying standings: highest average score first; players without attempts last
     var standings: [Standing] {
         players.indices.map { i in
-            let errors = qualifying[i].map(\.absErrorMs)
+            let scores = qualifying[i].map(\.score)
             return Standing(player: i,
-                            attempts: errors.count,
-                            meanMs: errors.isEmpty ? nil : Double(errors.reduce(0, +)) / Double(errors.count),
-                            bestMs: errors.min())
+                            attempts: scores.count,
+                            averageScore: scores.isEmpty ? nil : Double(scores.reduce(0, +)) / Double(scores.count),
+                            bestScore: scores.max())
         }
         .sorted { a, b in
-            switch (a.meanMs, b.meanMs) {
-            case let (x?, y?) where x != y: return x < y
+            switch (a.averageScore, b.averageScore) {
+            case let (x?, y?) where x != y: return x > y
             case (nil, _?): return false
             case (_?, nil): return true
             default: break
             }
-            if let x = a.bestMs, let y = b.bestMs, x != y { return x < y }
+            if let x = a.bestScore, let y = b.bestScore, x != y { return x > y }
             return a.player < b.player
         }
     }
@@ -129,9 +129,9 @@ struct Tournament: Codable, Equatable {
     private mutating func settleQualifying() {
         let order = standings
         let spots = min(advancingCount, order.count)
-        func key(_ s: Standing) -> [Double] { [s.meanMs ?? .infinity, Double(s.bestMs ?? .max)] }
+        func key(_ s: Standing) -> [Double] { [s.averageScore ?? -1, Double(s.bestScore ?? -1)] }
 
-        // Tied across the cutoff on both average and best attempt: sudden death for those spots
+        // Tied across the cutoff on both average and best score: sudden death for those spots
         if order.count > spots, key(order[spots - 1]) == key(order[spots]) {
             let tieKey = key(order[spots - 1])
             let ahead = order.prefix(spots).filter { key($0) != tieKey }.map(\.player)
@@ -168,21 +168,21 @@ struct Match: Codable, Equatable {
     var suddenDeathA: [GameAttempt] = []
     var suddenDeathB: [GameAttempt] = []
 
-    var aTotalMs: Int { aAttempts.map(\.absErrorMs).reduce(0, +) }
-    var bTotalMs: Int { bAttempts.map(\.absErrorMs).reduce(0, +) }
+    var aTotalScore: Int { aAttempts.map(\.score).reduce(0, +) }
+    var bTotalScore: Int { bAttempts.map(\.score).reduce(0, +) }
 
     var regulationDone: Bool {
         aAttempts.count >= attemptsEach && bAttempts.count >= attemptsEach
     }
 
-    var inSuddenDeath: Bool { regulationDone && aTotalMs == bTotalMs && winner == nil }
+    var inSuddenDeath: Bool { regulationDone && aTotalScore == bTotalScore && winner == nil }
 
-    /// Lower total (same as lower average) wins; a tie goes to sudden death
+    /// Higher total (same as higher average) score wins; a tie goes to sudden death
     var winner: Int? {
         guard regulationDone else { return nil }
-        if aTotalMs != bTotalMs { return aTotalMs < bTotalMs ? a : b }
-        for (x, y) in zip(suddenDeathA, suddenDeathB) where x.absErrorMs != y.absErrorMs {
-            return x.absErrorMs < y.absErrorMs ? a : b
+        if aTotalScore != bTotalScore { return aTotalScore > bTotalScore ? a : b }
+        for (x, y) in zip(suddenDeathA, suddenDeathB) where !x.ties(y) {
+            return x.beats(y) ? a : b
         }
         return nil
     }
@@ -240,15 +240,15 @@ struct Playoff: Codable, Equatable {
         round[i] = attempt
         guard round.allSatisfy({ $0 != nil }) else { return }
 
-        // Round complete: rank this round's errors
-        let ranked = zip(contenders, round.map { $0!.absErrorMs }).sorted { $0.1 < $1.1 }
-        if ranked.count > spots, ranked[spots - 1].1 == ranked[spots].1 {
+        // Round complete: best score first, closer time breaking a tied score
+        let ranked = zip(contenders, round.map { $0! }).sorted { $0.1.beats($1.1) }
+        if ranked.count > spots, ranked[spots - 1].1.ties(ranked[spots].1) {
             // Still tied at the cutoff: those clearly ahead advance, the tied ones go again
-            let tieError = ranked[spots - 1].1
-            let ahead = ranked.filter { $0.1 < tieError }.map(\.0)
+            let tie = ranked[spots - 1].1
+            let ahead = ranked.filter { $0.1.beats(tie) }.map(\.0)
             winners += ahead
             spots -= ahead.count
-            contenders = ranked.filter { $0.1 == tieError }.map(\.0).sorted()
+            contenders = ranked.filter { $0.1.ties(tie) }.map(\.0).sorted()
             round = Array(repeating: nil, count: contenders.count)
             roundNumber += 1
         } else {
