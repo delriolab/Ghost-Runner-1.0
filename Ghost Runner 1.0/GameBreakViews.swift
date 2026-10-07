@@ -33,6 +33,11 @@ struct GameBreakHomeView: View {
                     ModeCardLabel(title: "Free Play", subtitle: "Tap to start, tap when you think \(GameBreakScoring.targetText) is up")
                 }
                 NavigationLink {
+                    DuelView(engine: engine, simulateTaps: simulateTaps)
+                } label: {
+                    ModeCardLabel(title: "1 v 1", subtitle: "Player 1 vs Player 2, 3 tries each")
+                }
+                NavigationLink {
                     TournamentView(engine: engine, store: store, simulateTaps: simulateTaps)
                 } label: {
                     ModeCardLabel(title: "Tournament",
@@ -791,6 +796,197 @@ private struct ChampionView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
             }
+        }
+    }
+}
+
+// MARK: - 1 v 1
+
+struct DuelView: View {
+    @ObservedObject var engine: GameBreakEngine
+    let simulateTaps: Bool
+    @State private var duel = Duel()
+    /// The match before the last recorded try, for "Redo last attempt"
+    @State private var beforeLastAttempt: Duel?
+    @State private var confirmRestart = false
+
+    var body: some View {
+        Group {
+            if let winner = duel.winner {
+                DuelWinnerView(duel: duel, winner: winner,
+                               canRedo: beforeLastAttempt != nil,
+                               onRedo: redoLastAttempt,
+                               onRematch: restart)
+            } else if let turn = duel.currentTurn {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Text(turn.detail)
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.label)
+                        GameBreakPlayArea(phase: engine.phase, player: Duel.names[turn.player])
+                        GameBreakScore(phase: engine.phase)
+                        DuelScoreboard(duel: duel, upNow: turn.player)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .safeAreaInset(edge: .bottom) {
+                    GameControls(engine: engine, nextTitle: "NEXT", simulateTaps: simulateTaps)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu("Match options", systemImage: "ellipsis.circle") {
+                            Button("Redo last attempt", systemImage: "arrow.uturn.backward", action: redoLastAttempt)
+                                .disabled(!canRedo)
+                            Button("Restart match", systemImage: "arrow.counterclockwise", role: .destructive) {
+                                confirmRestart = true
+                            }
+                        }
+                    }
+                }
+                .confirmationDialog("Restart this match?", isPresented: $confirmRestart, titleVisibility: .visible) {
+                    Button("Restart match", role: .destructive, action: restart)
+                } message: {
+                    Text("Both players start over.")
+                }
+            }
+        }
+        .background(Theme.background)
+        .navigationTitle("1 v 1")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            engine.onAttemptAccepted = { attempt in
+                beforeLastAttempt = duel
+                duel.record(attempt)
+            }
+        }
+        .onDisappear {
+            engine.acceptResult()
+            engine.reset()
+            engine.onAttemptAccepted = nil
+        }
+    }
+
+    private var canRedo: Bool {
+        if case .result = engine.phase { return true }
+        return beforeLastAttempt != nil
+    }
+
+    /// A result on screen is thrown away; otherwise the last recorded try is taken back
+    private func redoLastAttempt() {
+        if case .result = engine.phase {
+            engine.redo()
+        } else if let previous = beforeLastAttempt {
+            engine.reset()
+            duel = previous
+            beforeLastAttempt = nil
+        }
+    }
+
+    private func restart() {
+        engine.reset()
+        engine.redo()
+        duel = Duel()
+        beforeLastAttempt = nil
+    }
+}
+
+private func averageScoreText(_ value: Double?) -> String {
+    guard let value else { return "—" }
+    return String(format: "%.1f", value)
+}
+
+/// Both players side by side: average score, each try's score, and who's up.
+private struct DuelScoreboard: View {
+    let duel: Duel
+    let upNow: Int?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            column(0)
+            column(1)
+        }
+    }
+
+    private func column(_ player: Int) -> some View {
+        let isUp = upNow == player
+        let tries = duel.attempts[player]
+        return VStack(spacing: 6) {
+            Text(Duel.names[player].uppercased())
+                .font(.caption.weight(.heavy))
+                .tracking(1)
+                .foregroundStyle(isUp ? Theme.accent : Theme.label)
+            Text(averageScoreText(duel.averageScore(player)))
+                .font(.system(size: 40, weight: .heavy))
+                .monospacedDigit()
+                .foregroundStyle(Theme.text)
+            Text("AVG SCORE")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Theme.label)
+            HStack(spacing: 6) {
+                ForEach(0..<Duel.attemptsEach, id: \.self) { i in
+                    Text(i < tries.count ? "\(tries[i].score)" : "–")
+                        .font(.footnote.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(i < tries.count ? Theme.text : Theme.label)
+                        .frame(minWidth: 32, minHeight: 26)
+                        .background(Theme.background, in: Capsule())
+                }
+            }
+            if !duel.suddenDeath[player].isEmpty {
+                Text("Sudden death: " + duel.suddenDeath[player].map { "\($0.score)" }.joined(separator: ", "))
+                    .font(.caption)
+                    .foregroundStyle(Theme.label)
+            }
+        }
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+                .strokeBorder(isUp ? Theme.accent : Theme.divider, lineWidth: isUp ? 2 : 1)
+        )
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct DuelWinnerView: View {
+    let duel: Duel
+    let winner: Int
+    let canRedo: Bool
+    let onRedo: () -> Void
+    let onRematch: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.top, 24)
+                Text(Duel.names[winner].uppercased() + " WINS")
+                    .font(.system(size: 40, weight: .heavy))
+                    .foregroundStyle(Theme.text)
+                    .multilineTextAlignment(.center)
+                if duel.averageScore(0) == duel.averageScore(1) {
+                    Text("Won in sudden death")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.label)
+                }
+                DuelScoreboard(duel: duel, upNow: nil)
+            }
+            .padding(.horizontal, 16)
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 10) {
+                if canRedo {
+                    GameButton(title: "Redo last attempt", action: onRedo)
+                }
+                GameButton(title: "Rematch", primary: true, action: onRematch)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
         }
     }
 }

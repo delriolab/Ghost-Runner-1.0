@@ -332,3 +332,46 @@ struct TournamentStoreTests {
         store.end()
     }
 }
+
+struct DuelTests {
+
+    private func attempt(_ errorMs: Int) -> GameAttempt { GameAttempt(elapsedMs: T + errorMs) }
+
+    @Test func playerOneTakesThreeTriesThenPlayerTwo() {
+        var duel = Duel()
+        var order: [Int] = []
+        for _ in 0..<6 {
+            order.append(duel.currentTurn!.player)
+            duel.record(attempt(20))
+        }
+        #expect(order == [0, 0, 0, 1, 1, 1])
+    }
+
+    @Test func higherAverageScoreWins() {
+        var duel = Duel()
+        for e in [5, 30, -60] { duel.record(attempt(e)) }      // 100, 94, 88
+        for e in [15, -40, 80] { duel.record(attempt(e)) }     // 98, 92, 84
+        #expect(duel.averageScore(0)! > duel.averageScore(1)!)
+        #expect(duel.winner == 0)
+        #expect(duel.currentTurn == nil)
+    }
+
+    @Test func tieGoesToSuddenDeath() {
+        var duel = Duel()
+        for _ in 0..<6 { duel.record(attempt(25)) }            // both average 95
+        #expect(duel.inSuddenDeath)
+        #expect(duel.currentTurn == Duel.Turn(player: 0, detail: "Sudden death"))
+        duel.record(attempt(50))                                // P1: 90
+        #expect(duel.currentTurn?.player == 1)
+        duel.record(attempt(-20))                               // P2: ~97
+        #expect(duel.winner == 1)
+    }
+
+    @Test func suddenDeathTiedScoreGoesToTheCloserTime() {
+        var duel = Duel()
+        for _ in 0..<6 { duel.record(attempt(25)) }
+        duel.record(attempt(4))                                 // both 100 PERFECT...
+        duel.record(attempt(-7))                                // ...but P1 was closer
+        #expect(duel.winner == 0)
+    }
+}
