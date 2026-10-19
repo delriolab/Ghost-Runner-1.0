@@ -14,10 +14,9 @@ struct SetupView: View {
     let timerRunning: Bool
     let connectionStatus: String
     let batteryLevel: Int?
-    let monitoring: Bool
+    let paused: Bool
 
-    let onStart: () -> Void
-    let onStop: () -> Void
+    let onTogglePause: () -> Void
     let onTestBuzzer: () -> Void
 
     private var times: SportTimes { StandardTimes.table(for: sport) }
@@ -33,7 +32,6 @@ struct SetupView: View {
 
     private var timeCaption: String { customTimeEnabled ? "Custom time" : "Ghost runner time" }
 
-    private var startDisabled: Bool { selectedTime == nil && !monitoring }
 
     /// Last second of the countdown turns red, like the website's "hot" clock
     private var countdownHot: Bool { timerRunning && remainingTime <= 1.0 }
@@ -71,6 +69,7 @@ struct SetupView: View {
                             .font(.system(size: 120, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(countdownHot ? Theme.alert : Theme.text)
+                            .opacity(paused ? 0.35 : 1)
                         Text("s")
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(Theme.label)
@@ -78,9 +77,15 @@ struct SetupView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
 
-                    Text(timeCaption)
-                        .font(.footnote)
-                        .foregroundStyle(Theme.label)
+                    if paused {
+                        Text("PAUSED · hits won't start the timer")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(Theme.connecting)
+                    } else {
+                        Text(timeCaption)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.label)
+                    }
 
                     CountdownBar(progress: countdownProgress, hot: countdownHot)
                         .padding(.top, 12)
@@ -90,7 +95,7 @@ struct SetupView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(timerRunning
                     ? "\(timeCaption), \(bigNumber) seconds left"
-                    : "\(timeCaption), \(bigNumber) seconds")
+                    : "\(timeCaption), \(bigNumber) seconds\(paused ? ", paused" : "")")
 
                 VStack(spacing: 0) {
                     PickerRow(label: times.categoryLabel, options: times.categories, selection: $category)
@@ -135,20 +140,22 @@ struct SetupView: View {
             SettingsView(onTestBuzzer: onTestBuzzer)
         }
         .safeAreaInset(edge: .bottom) {
-            Button {
-                monitoring ? onStop() : onStart()
-            } label: {
-                Text(monitoring ? "Stop" : "Start")
+            // Hits start the timer on their own; Pause is for when the coach is talking
+            Button(action: onTogglePause) {
+                Label(paused ? "Resume" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")
                     .font(.title2.bold())
-                    .foregroundStyle(startDisabled ? Theme.label : (monitoring ? Theme.onAlert : Theme.onAccent))
+                    .foregroundStyle(paused ? Theme.onAccent : Theme.text)
                     .frame(maxWidth: .infinity, minHeight: 60)
                     .background(
-                        monitoring ? Theme.alert : (startDisabled ? Theme.card : Theme.accent),
+                        paused ? Theme.accent : Theme.card,
                         in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+                            .strokeBorder(Theme.divider, lineWidth: paused ? 0 : 1)
                     )
             }
             .buttonStyle(PressableButtonStyle())
-            .disabled(startDisabled)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
         }

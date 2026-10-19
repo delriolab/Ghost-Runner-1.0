@@ -13,7 +13,7 @@ struct ContentView: View {
     @AppStorage("customTime") private var customTime: Double = 0
 
     @State private var path: [Sport]
-    @State private var monitoring = false
+    @State private var paused = false
     @State private var showGameBreak = false
     @State private var remainingTime: Double = 0
     @State private var timerRunning = false
@@ -44,9 +44,8 @@ struct ContentView: View {
                         timerRunning: timerRunning,
                         connectionStatus: bleManager.connectionStatus,
                         batteryLevel: bleManager.batteryLevel,
-                        monitoring: monitoring,
-                        onStart: start,
-                        onStop: stop,
+                        paused: paused,
+                        onTogglePause: togglePause,
                         onTestBuzzer: { SoundPlayer.shared.play() }
                     )
                 }
@@ -54,9 +53,9 @@ struct ContentView: View {
         .onChange(of: path) { _, newPath in
             if let sport = newPath.last {
                 savedSport = sport.rawValue
-            } else if monitoring {
-                // Back on sport selection: don't leave a drill armed
-                stop()
+            } else if paused {
+                // Back on sport selection: never leave the timer paused
+                paused = false
             }
         }
         .onAppear {
@@ -67,8 +66,9 @@ struct ContentView: View {
             bleManager.sendDelay(newValue)
         }
         .onReceive(bleManager.triggerPublisher) { _ in
-            // Game Break has its own taps; never run the training countdown there
-            guard !showGameBreak else { return }
+            // Game Break has its own taps; never run the training countdown there.
+            // While paused (coach talking), hits are ignored.
+            guard !showGameBreak, !paused else { return }
             startTimer()
         }
         // The puck switches to Game Break taps only while those screens are open
@@ -157,17 +157,14 @@ struct ContentView: View {
         )
     }
 
-    // MARK: - Start / Stop
+    // MARK: - Pause
 
-    private func start() {
-        bleManager.startMonitoring()
-        monitoring = true
-    }
-
-    private func stop() {
-        bleManager.stopMonitoring()
-        stopTimer()
-        monitoring = false
+    /// Pausing ignores hits, and cancels a countdown in progress, while the coach is talking
+    private func togglePause() {
+        paused.toggle()
+        if paused {
+            stopTimer()
+        }
     }
 
     // MARK: - Countdown
