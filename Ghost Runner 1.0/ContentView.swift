@@ -2,6 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var bleManager = BLEManager()
+    @Environment(\.scenePhase) private var scenePhase
+    // Screen stays on while connected; may lock 2 minutes after the puck drops off
+    @State private var screenAwake = ScreenAwake()
 
     // The coach's last setup, saved between launches
     @AppStorage("sport") private var savedSport = ""
@@ -59,6 +62,7 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            screenAwake.update(connected: isConnected)
             // Hand the launch delay to BLEManager so it is sent as soon as the sensor connects
             bleManager.sendDelay(selectedDelay)
         }
@@ -70,6 +74,15 @@ struct ContentView: View {
             // While paused (coach talking), hits are ignored.
             guard !showGameBreak, !paused else { return }
             startTimer()
+        }
+        .onChange(of: isConnected) { _, connected in
+            screenAwake.update(connected: connected)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Unlocking the phone gives it time to reconnect before it may lock again
+            if phase == .active {
+                screenAwake.update(connected: isConnected)
+            }
         }
         // The puck switches to Game Break taps only while those screens are open
         .onChange(of: showGameBreak) { _, isOpen in
@@ -83,6 +96,10 @@ struct ContentView: View {
         .sensoryFeedback(.warning, trigger: timerRunning) { wasRunning, isRunning in
             wasRunning && !isRunning && remainingTime <= 0
         }
+    }
+
+    private var isConnected: Bool {
+        bleManager.connectionStatus.hasPrefix("Connected")
     }
 
     // MARK: - Selection

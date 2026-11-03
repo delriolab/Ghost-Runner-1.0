@@ -20,10 +20,6 @@ struct Ghost_Runner_1_0App: App {
                 // Always dark; chalk keeps system controls (back button, toolbar) off the accent color
                 .preferredColorScheme(.dark)
                 .tint(Theme.text)
-                .onAppear {
-                    // Keep the screen awake while the app is open
-                    UIApplication.shared.isIdleTimerDisabled = true
-                }
         }
     }
 }

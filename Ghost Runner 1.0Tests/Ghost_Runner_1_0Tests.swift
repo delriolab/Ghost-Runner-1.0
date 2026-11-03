@@ -385,3 +385,34 @@ struct DuelTests {
         #expect(duel.winner == 0)
     }
 }
+
+@MainActor
+struct ScreenAwakeTests {
+
+    @Test func staysAwakeWhileConnected() async throws {
+        var keepAwake: [Bool] = []
+        let screen = ScreenAwake(grace: 0.05) { keepAwake.append($0) }
+        screen.update(connected: true)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(keepAwake == [true])
+    }
+
+    @Test func mayLockAfterTheGraceOnceDisconnected() async throws {
+        var keepAwake: [Bool] = []
+        let screen = ScreenAwake(grace: 0.05) { keepAwake.append($0) }
+        screen.update(connected: true)
+        screen.update(connected: false)
+        #expect(keepAwake.last == true)                       // still on right after the drop
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(keepAwake.last == false)                      // then the phone may lock
+    }
+
+    @Test func reconnectingWithinTheGraceKeepsItAwake() async throws {
+        var keepAwake: [Bool] = []
+        let screen = ScreenAwake(grace: 0.05) { keepAwake.append($0) }
+        screen.update(connected: false)
+        screen.update(connected: true)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(!keepAwake.contains(false))
+    }
+}
