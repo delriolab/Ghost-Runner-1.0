@@ -416,3 +416,16 @@ struct ScreenAwakeTests {
         #expect(!keepAwake.contains(false))
     }
 }
+
+struct HomeReturnTests {
+
+    @Test func quickSwitchesKeepTheirPlace() {
+        #expect(!HomeReturn.shouldGoHome(awayFor: 5))
+        #expect(!HomeReturn.shouldGoHome(awayFor: 59))
+    }
+
+    @Test func aRealBreakGoesBackHome() {
+        #expect(HomeReturn.shouldGoHome(awayFor: 60))
+        #expect(HomeReturn.shouldGoHome(awayFor: 3 * 60 * 60))
+    }
+}

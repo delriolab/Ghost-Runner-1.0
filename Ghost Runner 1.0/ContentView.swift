@@ -10,23 +10,22 @@ struct ContentView: View {
     @AppStorage("sport") private var savedSport = ""
     @AppStorage("baseballCategory") private var baseballCategory = ""
     @AppStorage("softballCategory") private var softballCategory = ""
-    @AppStorage("drill") private var savedDrill = StandardTimes.defaultDrill
+    // Each sport remembers its own last drill (the shared "drill" key from earlier versions seeds both)
+    @AppStorage("baseballDrill") private var baseballDrill = UserDefaults.standard.string(forKey: "drill") ?? StandardTimes.defaultDrill
+    @AppStorage("softballDrill") private var softballDrill = UserDefaults.standard.string(forKey: "drill") ?? StandardTimes.defaultDrill
     @AppStorage("intensity") private var intensity: Intensity = .routine
     @AppStorage("customTimeEnabled") private var customTimeEnabled = false
     @AppStorage("customTime") private var customTime: Double = 0
 
-    @State private var path: [Sport]
+    // Always starts on the home screen
+    @State private var path: [Sport] = []
+    /// When the app last went to the background, to decide whether to return home
+    @State private var backgroundedAt: Date?
     @State private var paused = false
     @State private var showGameBreak = false
     @State private var remainingTime: Double = 0
     @State private var timerRunning = false
     @State private var timer: Timer?
-
-    init() {
-        // Reopen straight on the setup screen for the last sport used
-        let sport = UserDefaults.standard.string(forKey: "sport").flatMap(Sport.init(rawValue:))
-        _path = State(initialValue: sport.map { [$0] } ?? [])
-    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -79,9 +78,19 @@ struct ContentView: View {
             screenAwake.update(connected: connected)
         }
         .onChange(of: scenePhase) { _, phase in
-            // Unlocking the phone gives it time to reconnect before it may lock again
-            if phase == .active {
+            switch phase {
+            case .background:
+                backgroundedAt = Date()
+            case .active:
+                // Back after a real break (e.g. the phone locked): start again from the home screen
+                if let since = backgroundedAt, HomeReturn.shouldGoHome(awayFor: Date().timeIntervalSince(since)) {
+                    goHome()
+                }
+                backgroundedAt = nil
+                // Unlocking the phone gives it time to reconnect before it may lock again
                 screenAwake.update(connected: isConnected)
+            default:
+                break
             }
         }
         // The puck switches to Game Break taps only while those screens are open
@@ -149,9 +158,15 @@ struct ContentView: View {
         return times.categories.contains(saved) ? saved : times.defaultCategory
     }
 
+    private func goHome() {
+        showGameBreak = false
+        path = []
+    }
+
     private func drill(for sport: Sport) -> String {
         let drills = StandardTimes.table(for: sport).drills
-        if drills.contains(savedDrill) { return savedDrill }
+        let saved = sport == .baseball ? baseballDrill : softballDrill
+        if drills.contains(saved) { return saved }
         return drills.contains(StandardTimes.defaultDrill) ? StandardTimes.defaultDrill : drills.first ?? ""
     }
 
@@ -170,7 +185,12 @@ struct ContentView: View {
     private func drillBinding(for sport: Sport) -> Binding<String> {
         Binding(
             get: { drill(for: sport) },
-            set: { savedDrill = $0 }
+            set: { newValue in
+                switch sport {
+                case .baseball: baseballDrill = newValue
+                case .softball: softballDrill = newValue
+                }
+            }
         )
     }
 
@@ -210,5 +230,15 @@ struct ContentView: View {
         timer?.invalidate()
         timer = nil
         timerRunning = false
+    }
+}
+
+/// When coming back to the app should start over on the home screen
+enum HomeReturn {
+    /// Quick switches away (reading a text mid-drill) keep their place; anything longer goes home
+    static let awayThreshold: TimeInterval = 60
+
+    static func shouldGoHome(awayFor seconds: TimeInterval) -> Bool {
+        seconds >= awayThreshold
     }
 }
