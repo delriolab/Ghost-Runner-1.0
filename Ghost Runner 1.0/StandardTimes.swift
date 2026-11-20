@@ -14,9 +14,11 @@ enum StandardTimes {
 
     static let baseball = SportTimes(
         categoryLabel: "Age group",
-        categories: ["7U–8U (40/60)", "9U–10U (46/65)", "11U–12U (50/70)", "13U (54/80)", "High school (60/90)", "College/pro (60/90)"],
+        categories: ["7U–8U (40/60)", "9U–10U (46/65)", "11U–12U (50/70)", "13U (54/80)", "Frosh (60/90)", "High school (60/90)", "College/pro (60/90)"],
         defaultCategory: "High school (60/90)",
-        drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home"],
+        drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home", "Delivery + Pop (steal 2nd)"],
+        // Delivery + Pop: 9U–10U 3.2, Frosh 3.6 and College/pro 3.2 Routine are the standards;
+        // the other age groups and the Pressure / Hair on fire steps are estimates.
         times: [
             "7U–8U (40/60)": [
                 "Home to 1st": t(4.4, 4.2, 4.0),
@@ -24,6 +26,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.4, 12.0, 11.6),
                 "2nd to Home": t(6.8, 6.4, 6.0),
                 "3rd to Home": t(3.5, 3.3, 3.1),
+                "Delivery + Pop (steal 2nd)": t(3.4, 3.2, 3.0),
             ],
             "9U–10U (46/65)": [
                 "Home to 1st": t(4.2, 4.0, 3.8),
@@ -31,6 +34,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.0, 11.6, 11.2),
                 "2nd to Home": t(6.5, 6.2, 5.9),
                 "3rd to Home": t(3.3, 3.1, 2.9),
+                "Delivery + Pop (steal 2nd)": t(3.2, 3.0, 2.8),
             ],
             "11U–12U (50/70)": [
                 "Home to 1st": t(4.3, 4.1, 3.9),
@@ -38,6 +42,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.1, 11.7, 11.3),
                 "2nd to Home": t(6.6, 6.3, 5.9),
                 "3rd to Home": t(3.4, 3.2, 3.0),
+                "Delivery + Pop (steal 2nd)": t(3.3, 3.1, 2.9),
             ],
             // 13U: Home to 1st Routine 4.4 is the standard. The other times are estimates
             // (11U–12U times scaled by 4.4/4.3), accepted for now; revise if they prove off.
@@ -47,6 +52,17 @@ enum StandardTimes {
                 "Home to 3rd": t(12.4, 12.0, 11.6),
                 "2nd to Home": t(6.8, 6.4, 6.0),
                 "3rd to Home": t(3.5, 3.3, 3.1),
+                "Delivery + Pop (steal 2nd)": t(3.5, 3.3, 3.1),
+            ],
+            // Frosh: Home to 1st 4.5 / 4.3 / 4.1 and Delivery + Pop 3.6 are the standards. The other
+            // Frosh times are estimates (High school times scaled by 4.5/4.3); revise if they prove off.
+            "Frosh (60/90)": [
+                "Home to 1st": t(4.5, 4.3, 4.1),
+                "Home to 2nd": t(8.1, 7.7, 7.4),
+                "Home to 3rd": t(12.8, 12.3, 11.9),
+                "2nd to Home": t(6.9, 6.6, 6.3),
+                "3rd to Home": t(3.6, 3.3, 3.1),
+                "Delivery + Pop (steal 2nd)": t(3.6, 3.4, 3.2),
             ],
             "High school (60/90)": [
                 "Home to 1st": t(4.3, 4.1, 3.9),
@@ -54,6 +70,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.2, 11.8, 11.4),
                 "2nd to Home": t(6.6, 6.3, 6.0),
                 "3rd to Home": t(3.4, 3.2, 3.0),
+                "Delivery + Pop (steal 2nd)": t(3.4, 3.2, 3.0),
             ],
             "College/pro (60/90)": [
                 "Home to 1st": t(4.2, 4.0, 3.8),
@@ -61,6 +78,7 @@ enum StandardTimes {
                 "Home to 3rd": t(11.7, 11.3, 10.9),
                 "2nd to Home": t(6.4, 6.0, 5.6),
                 "3rd to Home": t(3.3, 3.1, 2.9),
+                "Delivery + Pop (steal 2nd)": t(3.2, 3.0, 2.8),
             ],
         ]
     )
@@ -70,41 +88,43 @@ enum StandardTimes {
         categories: ["8U–10U", "11U–12U", "13U–14U", "High school", "College/elite"],
         defaultCategory: "High school",
         drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home"],
+        // No leadoffs in softball: 3rd to Home is each age group's Home to 1st times 3.2/3.5
+        // (High school 3.2 is the standard; the bat swing makes Home to 1st the longer of the two).
         times: [
             "8U–10U": [
                 "Home to 1st": t(4.4, 4.2, 4.0),
                 "Home to 2nd": t(7.8, 7.5, 7.2),
                 "Home to 3rd": t(12.4, 12.0, 11.6),
                 "2nd to Home": t(6.8, 6.4, 6.1),
-                "3rd to Home": t(3.5, 3.3, 3.1),
+                "3rd to Home": t(4.0, 3.8, 3.7),
             ],
             "11U–12U": [
                 "Home to 1st": t(4.0, 3.8, 3.6),
                 "Home to 2nd": t(7.1, 6.8, 6.5),
                 "Home to 3rd": t(11.3, 10.9, 10.5),
                 "2nd to Home": t(6.2, 5.8, 5.5),
-                "3rd to Home": t(3.2, 3.0, 2.8),
+                "3rd to Home": t(3.7, 3.5, 3.3),
             ],
             "13U–14U": [
                 "Home to 1st": t(3.7, 3.5, 3.3),
                 "Home to 2nd": t(6.6, 6.3, 5.9),
                 "Home to 3rd": t(10.5, 10.0, 9.6),
                 "2nd to Home": t(5.7, 5.3, 5.0),
-                "3rd to Home": t(2.9, 2.7, 2.5),
+                "3rd to Home": t(3.4, 3.2, 3.0),
             ],
             "High school": [
                 "Home to 1st": t(3.5, 3.3, 3.1),
                 "Home to 2nd": t(6.2, 5.9, 5.6),
                 "Home to 3rd": t(9.9, 9.5, 9.0),
                 "2nd to Home": t(5.4, 5.0, 4.7),
-                "3rd to Home": t(2.8, 2.6, 2.4),
+                "3rd to Home": t(3.2, 3.0, 2.8),
             ],
             "College/elite": [
                 "Home to 1st": t(3.2, 3.0, 2.8),
                 "Home to 2nd": t(5.8, 5.5, 5.2),
                 "Home to 3rd": t(9.3, 8.9, 8.5),
                 "2nd to Home": t(4.9, 4.6, 4.3),
-                "3rd to Home": t(2.5, 2.3, 2.2),
+                "3rd to Home": t(2.9, 2.7, 2.6),
             ],
         ]
     )
