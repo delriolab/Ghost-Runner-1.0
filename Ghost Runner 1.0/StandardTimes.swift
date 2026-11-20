@@ -90,40 +90,41 @@ enum StandardTimes {
         drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home"],
         // No leadoffs in softball: 3rd to Home is each age group's Home to 1st times 3.2/3.5
         // (High school 3.2 is the standard; the bat swing makes Home to 1st the longer of the two).
+        // 2nd to Home gets the same no-leadoff slowdown that each age group's 3rd to Home got.
         times: [
             "8U–10U": [
                 "Home to 1st": t(4.4, 4.2, 4.0),
                 "Home to 2nd": t(7.8, 7.5, 7.2),
                 "Home to 3rd": t(12.4, 12.0, 11.6),
-                "2nd to Home": t(6.8, 6.4, 6.1),
+                "2nd to Home": t(7.3, 6.9, 6.7),
                 "3rd to Home": t(4.0, 3.8, 3.7),
             ],
             "11U–12U": [
                 "Home to 1st": t(4.0, 3.8, 3.6),
                 "Home to 2nd": t(7.1, 6.8, 6.5),
                 "Home to 3rd": t(11.3, 10.9, 10.5),
-                "2nd to Home": t(6.2, 5.8, 5.5),
+                "2nd to Home": t(6.7, 6.3, 6.0),
                 "3rd to Home": t(3.7, 3.5, 3.3),
             ],
             "13U–14U": [
                 "Home to 1st": t(3.7, 3.5, 3.3),
                 "Home to 2nd": t(6.6, 6.3, 5.9),
                 "Home to 3rd": t(10.5, 10.0, 9.6),
-                "2nd to Home": t(5.7, 5.3, 5.0),
+                "2nd to Home": t(6.2, 5.8, 5.5),
                 "3rd to Home": t(3.4, 3.2, 3.0),
             ],
             "High school": [
                 "Home to 1st": t(3.5, 3.3, 3.1),
                 "Home to 2nd": t(6.2, 5.9, 5.6),
                 "Home to 3rd": t(9.9, 9.5, 9.0),
-                "2nd to Home": t(5.4, 5.0, 4.7),
+                "2nd to Home": t(5.8, 5.4, 5.1),
                 "3rd to Home": t(3.2, 3.0, 2.8),
             ],
             "College/elite": [
                 "Home to 1st": t(3.2, 3.0, 2.8),
                 "Home to 2nd": t(5.8, 5.5, 5.2),
                 "Home to 3rd": t(9.3, 8.9, 8.5),
-                "2nd to Home": t(4.9, 4.6, 4.3),
+                "2nd to Home": t(5.3, 5.0, 4.7),
                 "3rd to Home": t(2.9, 2.7, 2.6),
             ],
         ]
