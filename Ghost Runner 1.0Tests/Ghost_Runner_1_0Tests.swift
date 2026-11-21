@@ -429,3 +429,32 @@ struct HomeReturnTests {
         #expect(HomeReturn.shouldGoHome(awayFor: 3 * 60 * 60))
     }
 }
+
+struct CoachStartDrillTests {
+
+    @Test(arguments: Sport.allCases)
+    func tagUpIsBetweenTheSplitAndHomeToFirst(sport: Sport) {
+        let times = StandardTimes.table(for: sport)
+        for category in times.categories {
+            for intensity in Intensity.allCases {
+                let time = { StandardTimes.time(sport: sport, category: category, drill: $0, intensity: intensity)! }
+                let split = time("Home to 2nd") - time("Home to 1st")
+                let tagUp = time("Tag up")
+                #expect(tagUp < time("Home to 1st"), "\(sport.title) \(category) \(intensity.title)")
+                #expect(tagUp > split, "\(sport.title) \(category) \(intensity.title)")
+            }
+        }
+    }
+
+    @Test func coachStartDrillsAreMarked() {
+        #expect(StandardTimes.isCoachStart("Tag up"))
+        #expect(StandardTimes.isCoachStart("Delivery + Pop (steal 2nd)"))
+        #expect(!StandardTimes.isCoachStart("Home to 1st"))
+    }
+
+    @Test func softballHasTagUpButNoDeliveryPlusPop() {
+        #expect(StandardTimes.softball.drills.contains("Tag up"))
+        #expect(!StandardTimes.softball.drills.contains("Delivery + Pop (steal 2nd)"))
+        #expect(StandardTimes.baseball.drills.contains("Delivery + Pop (steal 2nd)"))
+    }
+}

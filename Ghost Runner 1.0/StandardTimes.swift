@@ -12,11 +12,22 @@ import Foundation
 enum StandardTimes {
     static let defaultDrill = "Home to 1st"
 
+    /// Coach start drills: the fungo hit doesn't start these. The coach starts the timer by striking
+    /// the bat (sensor on it) on the ground at the cue below. Shown as "Coach start" with the cue.
+    static let coachStartCues: [String: String] = [
+        "Delivery + Pop (steal 2nd)": "on the pitcher's first move",
+        "Tag up": "when the ball hits the fielder's glove",
+    ]
+
+    static func isCoachStart(_ drill: String) -> Bool { coachStartCues[drill] != nil }
+
     static let baseball = SportTimes(
         categoryLabel: "Age group",
         categories: ["7U–8U (40/60)", "9U–10U (46/65)", "11U–12U (50/70)", "13U (54/80)", "Frosh (60/90)", "High school (60/90)", "College/pro (60/90)"],
         defaultCategory: "High school (60/90)",
-        drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home", "Delivery + Pop (steal 2nd)"],
+        drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home", "Tag up", "Delivery + Pop (steal 2nd)"],
+        // Tag up: halfway between the 1st-to-2nd split (Home to 2nd minus Home to 1st) and Home
+        // to 1st, which is half of Home to 2nd. Faster than Home to 1st, slower than the split.
         // Delivery + Pop: 9U–10U 3.2, Frosh 3.6 and College/pro 3.2 Routine are the standards;
         // the other age groups and the Pressure / Hair on fire steps are estimates.
         times: [
@@ -26,6 +37,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.4, 12.0, 11.6),
                 "2nd to Home": t(6.8, 6.4, 6.0),
                 "3rd to Home": t(3.5, 3.3, 3.1),
+                "Tag up": t(3.9, 3.7, 3.6),
                 "Delivery + Pop (steal 2nd)": t(3.4, 3.2, 3.0),
             ],
             "9U–10U (46/65)": [
@@ -34,6 +46,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.0, 11.6, 11.2),
                 "2nd to Home": t(6.5, 6.2, 5.9),
                 "3rd to Home": t(3.3, 3.1, 2.9),
+                "Tag up": t(3.8, 3.6, 3.5),
                 "Delivery + Pop (steal 2nd)": t(3.2, 3.0, 2.8),
             ],
             "11U–12U (50/70)": [
@@ -42,6 +55,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.1, 11.7, 11.3),
                 "2nd to Home": t(6.6, 6.3, 5.9),
                 "3rd to Home": t(3.4, 3.2, 3.0),
+                "Tag up": t(3.8, 3.7, 3.5),
                 "Delivery + Pop (steal 2nd)": t(3.3, 3.1, 2.9),
             ],
             // 13U: Home to 1st Routine 4.4 is the standard. The other times are estimates
@@ -52,6 +66,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.4, 12.0, 11.6),
                 "2nd to Home": t(6.8, 6.4, 6.0),
                 "3rd to Home": t(3.5, 3.3, 3.1),
+                "Tag up": t(3.9, 3.8, 3.6),
                 "Delivery + Pop (steal 2nd)": t(3.5, 3.3, 3.1),
             ],
             // Frosh: Home to 1st 4.5 / 4.3 / 4.1 and Delivery + Pop 3.6 are the standards. The other
@@ -62,6 +77,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.8, 12.3, 11.9),
                 "2nd to Home": t(6.9, 6.6, 6.3),
                 "3rd to Home": t(3.6, 3.3, 3.1),
+                "Tag up": t(4.1, 3.9, 3.7),
                 "Delivery + Pop (steal 2nd)": t(3.6, 3.4, 3.2),
             ],
             "High school (60/90)": [
@@ -70,6 +86,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.2, 11.8, 11.4),
                 "2nd to Home": t(6.6, 6.3, 6.0),
                 "3rd to Home": t(3.4, 3.2, 3.0),
+                "Tag up": t(3.9, 3.7, 3.6),
                 "Delivery + Pop (steal 2nd)": t(3.4, 3.2, 3.0),
             ],
             "College/pro (60/90)": [
@@ -78,6 +95,7 @@ enum StandardTimes {
                 "Home to 3rd": t(11.7, 11.3, 10.9),
                 "2nd to Home": t(6.4, 6.0, 5.6),
                 "3rd to Home": t(3.3, 3.1, 2.9),
+                "Tag up": t(3.7, 3.6, 3.4),
                 "Delivery + Pop (steal 2nd)": t(3.2, 3.0, 2.8),
             ],
         ]
@@ -87,7 +105,9 @@ enum StandardTimes {
         categoryLabel: "Age group",
         categories: ["8U–10U", "11U–12U", "13U–14U", "High school", "College/elite"],
         defaultCategory: "High school",
-        drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home"],
+        drills: ["Home to 1st", "Home to 2nd", "Home to 3rd", "2nd to Home", "3rd to Home", "Tag up"],
+        // Tag up: halfway between the 1st-to-2nd split (Home to 2nd minus Home to 1st) and Home
+        // to 1st, which is half of Home to 2nd. Faster than Home to 1st, slower than the split.
         // No leadoffs in softball: 3rd to Home is each age group's Home to 1st times 3.2/3.5
         // (High school 3.2 is the standard; the bat swing makes Home to 1st the longer of the two).
         // 2nd to Home gets the same no-leadoff slowdown that each age group's 3rd to Home got.
@@ -98,6 +118,7 @@ enum StandardTimes {
                 "Home to 3rd": t(12.4, 12.0, 11.6),
                 "2nd to Home": t(7.3, 6.9, 6.7),
                 "3rd to Home": t(4.0, 3.8, 3.7),
+                "Tag up": t(3.9, 3.8, 3.6),
             ],
             "11U–12U": [
                 "Home to 1st": t(4.0, 3.8, 3.6),
@@ -105,6 +126,7 @@ enum StandardTimes {
                 "Home to 3rd": t(11.3, 10.9, 10.5),
                 "2nd to Home": t(6.7, 6.3, 6.0),
                 "3rd to Home": t(3.7, 3.5, 3.3),
+                "Tag up": t(3.6, 3.4, 3.3),
             ],
             "13U–14U": [
                 "Home to 1st": t(3.7, 3.5, 3.3),
@@ -112,6 +134,7 @@ enum StandardTimes {
                 "Home to 3rd": t(10.5, 10.0, 9.6),
                 "2nd to Home": t(6.2, 5.8, 5.5),
                 "3rd to Home": t(3.4, 3.2, 3.0),
+                "Tag up": t(3.3, 3.2, 3.0),
             ],
             "High school": [
                 "Home to 1st": t(3.5, 3.3, 3.1),
@@ -119,6 +142,7 @@ enum StandardTimes {
                 "Home to 3rd": t(9.9, 9.5, 9.0),
                 "2nd to Home": t(5.8, 5.4, 5.1),
                 "3rd to Home": t(3.2, 3.0, 2.8),
+                "Tag up": t(3.1, 3.0, 2.8),
             ],
             "College/elite": [
                 "Home to 1st": t(3.2, 3.0, 2.8),
@@ -126,6 +150,7 @@ enum StandardTimes {
                 "Home to 3rd": t(9.3, 8.9, 8.5),
                 "2nd to Home": t(5.3, 5.0, 4.7),
                 "3rd to Home": t(2.9, 2.7, 2.6),
+                "Tag up": t(2.9, 2.8, 2.6),
             ],
         ]
     )

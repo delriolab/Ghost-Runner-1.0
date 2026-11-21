@@ -85,6 +85,14 @@ struct SetupView: View {
                         Text(timeCaption)
                             .font(.footnote)
                             .foregroundStyle(Theme.label)
+                        if let cue = StandardTimes.coachStartCues[drill] {
+                            // Coach start: the fungo hit won't start this one
+                            Text("Coach start · strike the bat on the ground \(cue)")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Theme.accent)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 4)
+                        }
                     }
 
                     CountdownBar(progress: countdownProgress, hot: countdownHot)
@@ -103,7 +111,8 @@ struct SetupView: View {
                         .fill(Theme.divider)
                         .frame(height: 0.5)
                         .padding(.leading, 16)
-                    PickerRow(label: "Drill", options: times.drills, selection: $drill)
+                    PickerRow(label: "Drill", options: times.drills, selection: $drill,
+                              badge: { StandardTimes.isCoachStart($0) ? "Coach start" : nil })
                 }
                 .card()
                 // Still editable, but dimmed while the custom time is in charge
@@ -167,19 +176,27 @@ private struct PickerRow: View {
     let label: String
     let options: [String]
     @Binding var selection: String
+    /// Optional tag shown after an option, e.g. "Coach start"
+    var badge: (String) -> String? = { _ in nil }
+
+    private func title(_ option: String) -> String {
+        badge(option).map { "\(option) · \($0)" } ?? option
+    }
 
     var body: some View {
         Menu {
             Picker(label, selection: $selection) {
-                ForEach(options, id: \.self) { Text($0).tag($0) }
+                ForEach(options, id: \.self) { Text(title($0)).tag($0) }
             }
         } label: {
             HStack(spacing: 8) {
                 Text(label)
                     .foregroundStyle(Theme.label)
                 Spacer()
-                Text(selection)
+                Text(title(selection))
                     .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Theme.label)
@@ -189,7 +206,7 @@ private struct PickerRow: View {
             .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
-        .accessibilityValue(selection)
+        .accessibilityValue(title(selection))
     }
 }
 
