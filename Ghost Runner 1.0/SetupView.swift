@@ -183,17 +183,23 @@ private struct PickerRow: View {
         badge(option).map { "\(option) · \($0)" } ?? option
     }
 
+    /// The option with its tag in red, e.g. "Tag up · Coach start"
+    private func styledTitle(_ option: String) -> Text {
+        guard let badge = badge(option) else { return Text(option) }
+        return Text(option) + Text(" · ") + Text(badge).foregroundStyle(Theme.alert)
+    }
+
     var body: some View {
         Menu {
             Picker(label, selection: $selection) {
-                ForEach(options, id: \.self) { Text(title($0)).tag($0) }
+                ForEach(options, id: \.self) { styledTitle($0).tag($0) }
             }
         } label: {
             HStack(spacing: 8) {
                 Text(label)
                     .foregroundStyle(Theme.label)
                 Spacer()
-                Text(title(selection))
+                styledTitle(selection)
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
