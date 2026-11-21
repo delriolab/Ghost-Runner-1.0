@@ -171,7 +171,8 @@ struct SetupView: View {
     }
 }
 
-/// A card row with a gray label and a white value that opens a menu of options.
+/// A card row with a gray label and a white value that opens a list of options.
+/// The list is the app's own (not the iOS menu) so tags like "Coach start" can be red in it.
 private struct PickerRow: View {
     let label: String
     let options: [String]
@@ -179,27 +180,28 @@ private struct PickerRow: View {
     /// Optional tag shown after an option, e.g. "Coach start"
     var badge: (String) -> String? = { _ in nil }
 
+    @State private var showingList = false
+
     private func title(_ option: String) -> String {
         badge(option).map { "\(option) · \($0)" } ?? option
     }
 
-    /// The option with its tag in red, e.g. "Tag up · Coach start"
+    /// The option with its tag in red for the list, e.g. "Tag up · Coach start"
     private func styledTitle(_ option: String) -> Text {
         guard let badge = badge(option) else { return Text(option) }
         return Text(option) + Text(" · ") + Text(badge).foregroundStyle(Theme.alert)
     }
 
     var body: some View {
-        Menu {
-            Picker(label, selection: $selection) {
-                ForEach(options, id: \.self) { styledTitle($0).tag($0) }
-            }
+        Button {
+            showingList = true
         } label: {
             HStack(spacing: 8) {
                 Text(label)
                     .foregroundStyle(Theme.label)
                 Spacer()
-                styledTitle(selection)
+                // Once chosen, the tag is plain text; red is only for picking from the list
+                Text(title(selection))
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -211,8 +213,54 @@ private struct PickerRow: View {
             .frame(minHeight: 52)
             .contentShape(Rectangle())
         }
+        .buttonStyle(PressableButtonStyle())
         .accessibilityLabel(label)
         .accessibilityValue(title(selection))
+        // Opens above or below the row, wherever there's more room
+        .popover(isPresented: $showingList) {
+            optionList
+                .presentationCompactAdaptation(.popover)   // a drop-down on iPhone too, not a sheet
+                .presentationBackground(Theme.card)
+        }
+    }
+
+    private var optionList: some View {
+        ScrollView {
+            optionRows
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        // Tall enough for every drill without scrolling on most phones; scrolls if it can't fit
+        .frame(width: 320, height: min(CGFloat(options.count) * 56 + 12, 460))
+    }
+
+    private var optionRows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(options, id: \.self) { option in
+                let selected = option == selection
+                Button {
+                    selection = option
+                    showingList = false
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Image(systemName: "checkmark")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(Theme.text)
+                            .opacity(selected ? 1 : 0)
+                        styledTitle(option)
+                            .foregroundStyle(Theme.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 48)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityLabel(title(option))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 6)
     }
 }
 
