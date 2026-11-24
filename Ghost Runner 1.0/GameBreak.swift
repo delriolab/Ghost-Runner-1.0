@@ -3,8 +3,9 @@ import Combine
 
 // MARK: - Game Break Challenge
 //
-// Tap the puck to start a hidden timer, tap again when you think 4.000 s has
-// passed. Taps come from the puck as "HIT:<ms>", stamped with the puck's own
+// Tap the puck to start a hidden timer, tap again when you think the target time
+// has passed. The target is the Routine Home to 1st time for the chosen sport and
+// age group. Taps come from the puck as "HIT:<ms>", stamped with the puck's own
 // millisecond clock, so Bluetooth delays don't affect the measured time.
 
 /// A tap from the puck while it's in Game mode.
@@ -18,9 +19,23 @@ struct GameTap {
 /// One timed attempt at the target time.
 struct GameAttempt: Codable, Equatable {
     let elapsedMs: Int
+    /// The target this attempt was aiming for
+    let targetMs: Int
+
+    init(elapsedMs: Int, targetMs: Int = GameBreakScoring.defaultTargetMs) {
+        self.elapsedMs = elapsedMs
+        self.targetMs = targetMs
+    }
+
+    /// Attempts saved before targets were selectable were all aiming for 4.000
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        elapsedMs = try c.decode(Int.self, forKey: .elapsedMs)
+        targetMs = try c.decodeIfPresent(Int.self, forKey: .targetMs) ?? GameBreakScoring.defaultTargetMs
+    }
 
     /// Negative is early, positive is late
-    var errorMs: Int { elapsedMs - GameBreakScoring.targetMs }
+    var errorMs: Int { elapsedMs - targetMs }
     var absErrorMs: Int { abs(errorMs) }
     var score: Int { GameBreakScoring.score(absErrorMs: absErrorMs) }
     var isPerfect: Bool { absErrorMs <= GameBreakScoring.perfectMs }
@@ -36,8 +51,8 @@ struct GameAttempt: Codable, Equatable {
 }
 
 enum GameBreakScoring {
-    /// The time to hit. Change it here; every screen and score follows.
-    static let targetMs = 4000
+    /// The target before it became selectable; still used for older saved tournaments
+    static let defaultTargetMs = 4000
     static let perfectMs = 10
 
     /// Score at each error (ms); straight lines in between, 0 beyond the last point.
@@ -65,9 +80,6 @@ enum GameBreakScoring {
         (end - start) & (puckClockPeriod - 1)
     }
 
-    /// "4.000"
-    static var targetText: String { seconds(targetMs) }
-
     /// "4.173"
     static func seconds(_ ms: Int) -> String {
         String(format: "%d.%03d", ms / 1000, ms % 1000)
@@ -83,6 +95,12 @@ enum GameBreakScoring {
 final class GameBreakEngine: ObservableObject {
     /// Taps this soon after the start are ignored (double taps, bounces)
     static let stopLockoutMs = 2500
+
+    /// What this attempt is aiming for; set by the open screen
+    var targetMs = GameBreakScoring.defaultTargetMs
+
+    /// Short targets (fast softball age groups) keep at least 0.7 s after the lockout
+    var lockoutMs: Int { min(Self.stopLockoutMs, targetMs - 700) }
     /// How long a result stays up before the next try starts automatically
     static let resultHoldSeconds = 3.0
 
@@ -148,9 +166,9 @@ final class GameBreakEngine: ObservableObject {
             guard let start = startTap else { return }
             let elapsed = Self.elapsedMs(from: start, to: tap)
             // A double tap or bounce right after the start can't end the attempt
-            guard elapsed >= Self.stopLockoutMs else { return }
+            guard elapsed >= lockoutMs else { return }
             startTap = nil
-            showResult(GameAttempt(elapsedMs: elapsed))
+            showResult(GameAttempt(elapsedMs: elapsed, targetMs: targetMs))
         case .notReady, .result:
             break   // taps while the result is showing are ignored
         }
@@ -203,4 +221,23 @@ final class GameBreakEngine: ObservableObject {
         let (seconds, attoseconds) = duration.components
         return Int((Double(seconds) * 1000 + Double(attoseconds) / 1e15).rounded())
     }
+}
+
+// MARK: - Target
+
+/// The Game Break target: the Routine Home to 1st time for a sport and age group.
+struct GameBreakTarget: Equatable {
+    static let drill = "Home to 1st"
+
+    let sport: Sport
+    let category: String
+
+    /// The target in milliseconds, or nil if the table has no Home to 1st time for this age group
+    var ms: Int? {
+        StandardTimes.time(sport: sport, category: category, drill: Self.drill, intensity: .routine)
+            .map { Int(($0 * 1000).rounded()) }
+    }
+
+    /// "Baseball · High school (60/90)"
+    var label: String { "\(sport.title) · \(category)" }
 }

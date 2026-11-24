@@ -97,7 +97,7 @@ struct CustomTimeTests {
     }
 }
 
-private let T = GameBreakScoring.targetMs
+private let T = GameBreakScoring.defaultTargetMs
 
 struct GameBreakScoringTests {
 
@@ -225,7 +225,7 @@ struct GameBreakEngineTests {
 
 struct TournamentTests {
 
-    private func attempt(_ errorMs: Int) -> GameAttempt { GameAttempt(elapsedMs: GameBreakScoring.targetMs + errorMs) }
+    private func attempt(_ errorMs: Int) -> GameAttempt { GameAttempt(elapsedMs: GameBreakScoring.defaultTargetMs + errorMs) }
 
     /// Plays the current turn with the error chosen for that player
     private func play(_ t: inout Tournament, _ errors: [String: Int]) {
@@ -456,5 +456,60 @@ struct CoachStartDrillTests {
         #expect(StandardTimes.softball.drills.contains("Tag up"))
         #expect(!StandardTimes.softball.drills.contains("Delivery + Pop (steal 2nd)"))
         #expect(StandardTimes.baseball.drills.contains("Delivery + Pop (steal 2nd)"))
+    }
+}
+
+struct GameBreakTargetTests {
+
+    @Test func targetIsRoutineHomeToFirstForTheLevel() {
+        #expect(GameBreakTarget(sport: .baseball, category: "High school (60/90)").ms == 4300)
+        #expect(GameBreakTarget(sport: .baseball, category: "Frosh (60/90)").ms == 4500)
+        #expect(GameBreakTarget(sport: .softball, category: "High school").ms == 3500)
+        #expect(GameBreakTarget(sport: .softball, category: "College/elite").ms == 3200)
+        #expect(GameBreakTarget(sport: .softball, category: "No such level").ms == nil)
+    }
+
+    @Test(arguments: Sport.allCases)
+    func everyLevelHasATarget(sport: Sport) {
+        for category in StandardTimes.table(for: sport).categories {
+            #expect(GameBreakTarget(sport: sport, category: category).ms != nil, "\(sport.title) \(category)")
+        }
+    }
+
+    @Test func attemptsScoreAgainstTheirOwnTarget() {
+        let softball = GameAttempt(elapsedMs: 3473, targetMs: 3500)
+        #expect(softball.errorMs == -27)
+        #expect(softball.score == 95)
+        #expect(GameAttempt(elapsedMs: 4300, targetMs: 4300).isPerfect)
+    }
+
+    @Test func attemptsSavedBeforeTargetsWereSelectableUseFourSeconds() throws {
+        let old = try JSONDecoder().decode(GameAttempt.self, from: Data(#"{"elapsedMs":4012}"#.utf8))
+        #expect(old.targetMs == 4000)
+        #expect(old.errorMs == 12)
+    }
+
+    @Test func tournamentKeepsTheTargetItStartedWith() throws {
+        var t = Tournament(players: ["A", "B"], targetMs: 3500, targetLabel: "Softball · High school")
+        t.record(GameAttempt(elapsedMs: 3510, targetMs: t.targetMs))
+        let loaded = try JSONDecoder().decode(Tournament.self, from: JSONEncoder().encode(t))
+        #expect(loaded.targetMs == 3500)
+        #expect(loaded.targetLabel == "Softball · High school")
+        // A tournament saved before targets existed reads back as 4.000
+        let legacy = try JSONDecoder().decode(Tournament.self, from: Data(#"{"players":["A","B"],"qualifying":[[],[]],"semifinals":[]}"#.utf8))
+        #expect(legacy.targetMs == 4000)
+    }
+
+    @MainActor
+    @Test func shortTargetsKeepRoomAfterTheLockout() {
+        let engine = GameBreakEngine()
+        engine.targetMs = 3200                                // Softball College/elite
+        #expect(engine.lockoutMs == 2500)
+        engine.targetMs = 2900
+        #expect(engine.lockoutMs == 2200)                     // never closer than 0.7 s to the target
+        engine.updateAvailability(connected: true, confirmed: true, failed: false, simulated: false)
+        engine.handleTap(GameTap(puckMs: 0, receivedAt: .now))
+        engine.handleTap(GameTap(puckMs: 2900, receivedAt: .now))
+        #expect(engine.phase == .result(GameAttempt(elapsedMs: 2900, targetMs: 2900)))
     }
 }

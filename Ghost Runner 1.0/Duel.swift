@@ -10,6 +10,16 @@ struct Duel: Equatable {
     static let attemptsEach = 3
     static let names = ["Player 1", "Player 2"]
 
+    /// Target locked in for this match
+    let targetMs: Int
+    /// e.g. "Softball · High school"
+    let targetLabel: String?
+
+    init(targetMs: Int = GameBreakScoring.defaultTargetMs, targetLabel: String? = nil) {
+        self.targetMs = targetMs
+        self.targetLabel = targetLabel
+    }
+
     /// Regulation tries for Player 1 and Player 2
     var attempts: [[GameAttempt]] = [[], []]
     /// Sudden-death tries, one each per round

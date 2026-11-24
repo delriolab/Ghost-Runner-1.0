@@ -11,6 +11,35 @@ struct GameBreakHomeView: View {
     @AppStorage("gameBreakSimulateTaps") private var simulateTaps = false
     @State private var showSettings = false
 
+    // Target: the Routine Home to 1st time for a sport and age group, remembered between launches.
+    // Defaults to the sport last used for training.
+    @AppStorage("gameBreakSport") private var targetSportRaw = UserDefaults.standard.string(forKey: "sport") ?? Sport.baseball.rawValue
+    @AppStorage("gameBreakCategory") private var targetCategoryRaw = ""
+
+    private var targetSport: Sport { Sport(rawValue: targetSportRaw) ?? .baseball }
+
+    private var target: GameBreakTarget {
+        let times = StandardTimes.table(for: targetSport)
+        // Until one is picked here, use the age group last used in that sport's training screen
+        let trainingKey = targetSport == .baseball ? "baseballCategory" : "softballCategory"
+        let candidates = [targetCategoryRaw, UserDefaults.standard.string(forKey: trainingKey) ?? ""]
+        let category = candidates.first { times.categories.contains($0) } ?? times.defaultCategory
+        return GameBreakTarget(sport: targetSport, category: category)
+    }
+
+    private var targetMs: Int { target.ms ?? GameBreakScoring.defaultTargetMs }
+
+    private var sportBinding: Binding<String> {
+        Binding(get: { targetSport.title },
+                set: { title in
+                    if let sport = Sport.allCases.first(where: { $0.title == title }) { targetSportRaw = sport.rawValue }
+                })
+    }
+
+    private var categoryBinding: Binding<String> {
+        Binding(get: { target.category }, set: { targetCategoryRaw = $0 })
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -18,27 +47,36 @@ struct GameBreakHomeView: View {
                 SensorPill(status: bleManager.connectionStatus, batteryLevel: bleManager.batteryLevel)
             }
 
-            Spacer()
-            TargetHeader(size: 80)
-            Text("How close can you get?")
-                .font(.subheadline)
-                .foregroundStyle(Theme.label)
-                .padding(.top, 4)
-            Spacer()
+            Spacer(minLength: 8)
+            TargetHeader(ms: targetMs, size: 72, detail: "\(GameBreakTarget.drill) · Routine")
+            Spacer(minLength: 12)
+
+            VStack(spacing: 0) {
+                PickerRow(label: "Sport", options: Sport.allCases.map(\.title), selection: sportBinding)
+                Rectangle()
+                    .fill(Theme.divider)
+                    .frame(height: 0.5)
+                    .padding(.leading, 16)
+                PickerRow(label: "Age group", options: StandardTimes.table(for: targetSport).categories,
+                          selection: categoryBinding)
+            }
+            .card()
+            Spacer(minLength: 12)
 
             VStack(spacing: 14) {
                 NavigationLink {
-                    FreePlayView(engine: engine, simulateTaps: simulateTaps)
+                    FreePlayView(engine: engine, targetMs: targetMs, targetLabel: target.label, simulateTaps: simulateTaps)
                 } label: {
-                    ModeCardLabel(title: "Free Play", subtitle: "Tap to start, tap when you think \(GameBreakScoring.targetText) is up")
+                    ModeCardLabel(title: "Free Play", subtitle: "Tap to start, tap when you think \(GameBreakScoring.seconds(targetMs)) is up")
                 }
                 NavigationLink {
-                    DuelView(engine: engine, simulateTaps: simulateTaps)
+                    DuelView(engine: engine, targetMs: targetMs, targetLabel: target.label, simulateTaps: simulateTaps)
                 } label: {
                     ModeCardLabel(title: "1 v 1", subtitle: "Player 1 vs Player 2, 3 tries each")
                 }
                 NavigationLink {
-                    TournamentView(engine: engine, store: store, simulateTaps: simulateTaps)
+                    TournamentView(engine: engine, store: store, targetMs: targetMs, targetLabel: target.label,
+                                   simulateTaps: simulateTaps)
                 } label: {
                     ModeCardLabel(title: "Tournament",
                                   subtitle: store.tournament == nil
@@ -65,7 +103,11 @@ struct GameBreakHomeView: View {
             SettingsView(onTestBuzzer: { SoundPlayer.shared.play() })
         }
         .onReceive(bleManager.gameTapPublisher) { engine.handleTap($0) }
-        .onAppear(perform: updateAvailability)
+        .onAppear {
+            updateAvailability()
+            engine.targetMs = targetMs
+        }
+        .onChange(of: targetMs) { _, ms in engine.targetMs = ms }
         .onChange(of: bleManager.connectionStatus) { updateAvailability() }
         .onChange(of: bleManager.gameModeConfirmed) { updateAvailability() }
         .onChange(of: bleManager.gameModeFailed) { updateAvailability() }
@@ -107,9 +149,11 @@ private struct ModeCardLabel: View {
     }
 }
 
-/// "TARGET 4.000 s"
+/// "TARGET 4.300 s" with what it's based on underneath
 private struct TargetHeader: View {
+    let ms: Int
     var size: CGFloat = 56
+    var detail: String? = nil
 
     var body: some View {
         VStack(spacing: 2) {
@@ -118,7 +162,7 @@ private struct TargetHeader: View {
                 .tracking(1.5)
                 .foregroundStyle(Theme.label)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(GameBreakScoring.targetText)
+                Text(GameBreakScoring.seconds(ms))
                     .font(.system(size: size, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(Theme.text)
@@ -126,9 +170,15 @@ private struct TargetHeader: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Theme.label)
             }
+            if let detail {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.label)
+                    .multilineTextAlignment(.center)
+            }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Target \(GameBreakScoring.targetText) seconds")
+        .accessibilityLabel("Target \(GameBreakScoring.seconds(ms)) seconds\(detail.map { ", \($0)" } ?? "")")
     }
 }
 
@@ -216,7 +266,7 @@ struct GameBreakPlayArea: View {
     }
 
     private func deltaText(_ attempt: GameAttempt) -> String {
-        if attempt.errorMs == 0 { return "RIGHT ON \(GameBreakScoring.targetText)" }
+        if attempt.errorMs == 0 { return "RIGHT ON \(GameBreakScoring.seconds(attempt.targetMs))" }
         return "\(GameBreakScoring.seconds(attempt.absErrorMs)) \(attempt.errorMs < 0 ? "EARLY" : "LATE")"
     }
 
@@ -362,13 +412,15 @@ private struct GameControls: View {
 
 struct FreePlayView: View {
     @ObservedObject var engine: GameBreakEngine
+    let targetMs: Int
+    let targetLabel: String
     let simulateTaps: Bool
     @State private var attempts: [GameAttempt] = []
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                TargetHeader()
+                TargetHeader(ms: targetMs, detail: targetLabel)
                 GameBreakPlayArea(phase: engine.phase)
                 GameBreakScore(phase: engine.phase)
                 if let best = attempts.min(by: { $0.absErrorMs < $1.absErrorMs }) {
@@ -390,6 +442,7 @@ struct FreePlayView: View {
             GameControls(engine: engine, nextTitle: "NEXT TRY", simulateTaps: simulateTaps)
         }
         .onAppear {
+            engine.targetMs = targetMs
             engine.onAttemptAccepted = { attempts.append($0) }
         }
         .onDisappear {
@@ -426,6 +479,9 @@ private struct SessionStat: View {
 struct TournamentView: View {
     @ObservedObject var engine: GameBreakEngine
     @ObservedObject var store: TournamentStore
+    /// Used for a new tournament; one in progress keeps the target it started with
+    let targetMs: Int
+    let targetLabel: String
     let simulateTaps: Bool
 
     var body: some View {
@@ -437,7 +493,7 @@ struct TournamentView: View {
                     TournamentPlayView(engine: engine, store: store, simulateTaps: simulateTaps)
                 }
             } else {
-                TournamentSetupView(store: store)
+                TournamentSetupView(store: store, targetMs: targetMs, targetLabel: targetLabel)
             }
         }
         .background(Theme.background)
@@ -447,6 +503,8 @@ struct TournamentView: View {
 
 private struct TournamentSetupView: View {
     @ObservedObject var store: TournamentStore
+    let targetMs: Int
+    let targetLabel: String
     @State private var names: [String] = []
     @State private var newName = ""
     @FocusState private var nameFieldFocused: Bool
@@ -466,7 +524,7 @@ private struct TournamentSetupView: View {
                 }
                 .listRowBackground(Theme.card)
             } footer: {
-                Text("Each player takes 3 tries in a row, then passes the puck. The 4 best average scores play the Final Four.")
+                Text("Target \(GameBreakScoring.seconds(targetMs)) s (\(targetLabel), Home to 1st). Each player takes 3 tries in a row, then passes the puck. The 4 best average scores play the Final Four.")
                     .foregroundStyle(Theme.label)
             }
 
@@ -501,7 +559,7 @@ private struct TournamentSetupView: View {
         }
         .safeAreaInset(edge: .bottom) {
             GameButton(title: "Start tournament", primary: true) {
-                store.start(players: names)
+                store.start(players: names, targetMs: targetMs, targetLabel: targetLabel)
             }
             .disabled(names.count < Tournament.minimumPlayers)
             .opacity(names.count < Tournament.minimumPlayers ? 0.4 : 1)
@@ -538,6 +596,9 @@ private struct TournamentPlayView: View {
                             .foregroundStyle(Theme.accent)
                         Text(turn.detail)
                             .font(.subheadline)
+                            .foregroundStyle(Theme.label)
+                        Text(targetLine(tournament.targetMs, tournament.targetLabel))
+                            .font(.footnote)
                             .foregroundStyle(Theme.label)
                     }
 
@@ -586,6 +647,8 @@ private struct TournamentPlayView: View {
                 GameControls(engine: engine, nextTitle: "NEXT", simulateTaps: simulateTaps)
             }
             .onAppear {
+                // The tournament plays to the target it started with
+                engine.targetMs = tournament.targetMs
                 // Each accepted attempt counts for whoever's turn it is
                 engine.onAttemptAccepted = { store.record($0) }
             }
@@ -820,8 +883,18 @@ private struct ChampionView: View {
 
 struct DuelView: View {
     @ObservedObject var engine: GameBreakEngine
+    let targetMs: Int
+    let targetLabel: String
     let simulateTaps: Bool
-    @State private var duel = Duel()
+    @State private var duel: Duel
+
+    init(engine: GameBreakEngine, targetMs: Int, targetLabel: String, simulateTaps: Bool) {
+        self.engine = engine
+        self.targetMs = targetMs
+        self.targetLabel = targetLabel
+        self.simulateTaps = simulateTaps
+        _duel = State(initialValue: Duel(targetMs: targetMs, targetLabel: targetLabel))
+    }
     /// The match before the last recorded try, for "Redo last attempt"
     @State private var beforeLastAttempt: Duel?
     @State private var confirmRestart = false
@@ -836,9 +909,14 @@ struct DuelView: View {
             } else if let turn = duel.currentTurn {
                 ScrollView {
                     VStack(spacing: 16) {
-                        Text(turn.detail)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.label)
+                        VStack(spacing: 2) {
+                            Text(turn.detail)
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.label)
+                            Text(targetLine(duel.targetMs, duel.targetLabel))
+                                .font(.footnote)
+                                .foregroundStyle(Theme.label)
+                        }
                         GameBreakPlayArea(phase: engine.phase, player: Duel.names[turn.player])
                         GameBreakScore(phase: engine.phase)
                         DuelScoreboard(duel: duel, upNow: turn.player)
@@ -872,6 +950,7 @@ struct DuelView: View {
         .navigationTitle("1 v 1")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            engine.targetMs = duel.targetMs
             engine.onAttemptAccepted = { attempt in
                 beforeLastAttempt = duel
                 duel.record(attempt)
@@ -903,7 +982,7 @@ struct DuelView: View {
     private func restart() {
         engine.reset()
         engine.redo()
-        duel = Duel()
+        duel = Duel(targetMs: targetMs, targetLabel: targetLabel)
         beforeLastAttempt = nil
     }
 }
@@ -1005,4 +1084,9 @@ private struct DuelWinnerView: View {
             .padding(.bottom, 8)
         }
     }
+}
+
+/// "Target 4.300 s · Baseball · High school (60/90)"
+private func targetLine(_ ms: Int, _ label: String?) -> String {
+    "Target \(GameBreakScoring.seconds(ms)) s" + (label.map { " · \($0)" } ?? "")
 }

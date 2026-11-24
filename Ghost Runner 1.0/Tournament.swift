@@ -26,10 +26,19 @@ struct Tournament: Codable, Equatable {
     var seeds: [Int]?
     var semifinals: [Match] = []
     var championship: Match?
+    /// Target locked in when the tournament started (nil in tournaments saved before targets
+    /// were selectable, which were all 4.000)
+    var lockedTargetMs: Int?
+    /// e.g. "Baseball · High school (60/90)"
+    var targetLabel: String?
 
-    init(players: [String]) {
+    var targetMs: Int { lockedTargetMs ?? GameBreakScoring.defaultTargetMs }
+
+    init(players: [String], targetMs: Int = GameBreakScoring.defaultTargetMs, targetLabel: String? = nil) {
         self.players = players
         self.qualifying = Array(repeating: [], count: players.count)
+        self.lockedTargetMs = targetMs
+        self.targetLabel = targetLabel
     }
 
     // MARK: Turns
@@ -272,9 +281,9 @@ final class TournamentStore: ObservableObject {
     /// The tournament as it was before the last recorded attempt, for "Redo last attempt"
     @Published private(set) var beforeLastAttempt: Tournament?
 
-    func start(players: [String]) {
+    func start(players: [String], targetMs: Int = GameBreakScoring.defaultTargetMs, targetLabel: String? = nil) {
         beforeLastAttempt = nil
-        tournament = Tournament(players: players)
+        tournament = Tournament(players: players, targetMs: targetMs, targetLabel: targetLabel)
     }
 
     func end() {

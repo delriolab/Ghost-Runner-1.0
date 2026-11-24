@@ -173,7 +173,7 @@ struct SetupView: View {
 
 /// A card row with a gray label and a white value that opens a list of options.
 /// The list is the app's own (not the iOS menu) so tags like "Coach start" can be red in it.
-private struct PickerRow: View {
+struct PickerRow: View {
     let label: String
     let options: [String]
     @Binding var selection: String
