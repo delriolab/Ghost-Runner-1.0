@@ -513,3 +513,45 @@ struct GameBreakTargetTests {
         #expect(engine.phase == .result(GameAttempt(elapsedMs: 2900, targetMs: 2900)))
     }
 }
+
+struct TagUpTriggerTests {
+    private let t0 = Date(timeIntervalSinceReferenceDate: 1000)
+
+    @Test func onlyTagUpWaitsForTheSecondHit() {
+        #expect(TagUpTrigger.applies(to: "Tag up"))
+        for drill in StandardTimes.baseball.drills where drill != "Tag up" {
+            #expect(!TagUpTrigger.applies(to: drill), "\(drill)")
+        }
+    }
+
+    @Test func flyBallArmsThenTheCatchStarts() {
+        var tagUp = TagUpTrigger()
+        let flyBall = tagUp.hit(at: t0)
+        #expect(!flyBall)
+        #expect(tagUp.isBallInAir(at: t0.addingTimeInterval(3)))
+        let atCatch = tagUp.hit(at: t0.addingTimeInterval(4.2))
+        #expect(atCatch)                                             // starts the runner
+        #expect(!tagUp.isBallInAir(at: t0.addingTimeInterval(4.3)))
+        let nextFlyBall = tagUp.hit(at: t0.addingTimeInterval(9))
+        #expect(!nextFlyBall)
+    }
+
+    @Test func noCatchWithinSixSecondsMeansTheNextHitIsANewFlyBall() {
+        var tagUp = TagUpTrigger()
+        _ = tagUp.hit(at: t0)
+        #expect(tagUp.isBallInAir(at: t0.addingTimeInterval(5.9)))
+        #expect(!tagUp.isBallInAir(at: t0.addingTimeInterval(6)))
+        let late = tagUp.hit(at: t0.addingTimeInterval(7))
+        #expect(!late)                                               // a new fly ball
+        let itsCatch = tagUp.hit(at: t0.addingTimeInterval(10))
+        #expect(itsCatch)
+    }
+
+    @Test func resetForgetsTheFlyBall() {
+        var tagUp = TagUpTrigger()
+        _ = tagUp.hit(at: t0)
+        tagUp.reset()
+        let afterReset = tagUp.hit(at: t0.addingTimeInterval(3))
+        #expect(!afterReset)
+    }
+}

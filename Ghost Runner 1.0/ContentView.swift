@@ -26,6 +26,9 @@ struct ContentView: View {
     @State private var remainingTime: Double = 0
     @State private var timerRunning = false
     @State private var timer: Timer?
+    /// Tag up: the fly ball arms it, the strike at the catch starts the timer
+    @State private var tagUp = TagUpTrigger()
+    @State private var tagUpTimeout: Task<Void, Never>?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -47,6 +50,7 @@ struct ContentView: View {
                         connectionStatus: bleManager.connectionStatus,
                         batteryLevel: bleManager.batteryLevel,
                         paused: paused,
+                        ballInAir: tagUp.ballHitAt != nil,
                         onTogglePause: togglePause,
                         onTestBuzzer: { SoundPlayer.shared.play() }
                     )
@@ -59,7 +63,10 @@ struct ContentView: View {
                 // Back on sport selection: never leave the timer paused
                 paused = false
             }
+            resetTagUp()
         }
+        .onChange(of: baseballDrill) { resetTagUp() }
+        .onChange(of: softballDrill) { resetTagUp() }
         .onAppear {
             screenAwake.update(connected: isConnected)
             // Hand the launch delay to BLEManager so it is sent as soon as the sensor connects
@@ -72,7 +79,11 @@ struct ContentView: View {
             // Game Break has its own taps; never run the training countdown there.
             // While paused (coach talking), hits are ignored.
             guard !showGameBreak, !paused else { return }
-            startTimer()
+            if let sport = path.last, TagUpTrigger.applies(to: drill(for: sport)) {
+                tagUpHit()
+            } else {
+                startTimer()
+            }
         }
         .onChange(of: isConnected) { _, connected in
             screenAwake.update(connected: connected)
@@ -201,7 +212,43 @@ struct ContentView: View {
         paused.toggle()
         if paused {
             stopTimer()
+            resetTagUp()
         }
+    }
+
+    // MARK: - Tag up
+
+    private func tagUpHit() {
+        let now = Date()
+        // During a countdown, a hit is the next fly ball; it doesn't restart the runner
+        if timerRunning {
+            if !tagUp.isBallInAir(at: now) {
+                tagUp.ballHit(at: now)
+                waitForCatch()
+            }
+            return
+        }
+        if tagUp.hit(at: now) {
+            tagUpTimeout?.cancel()
+            startTimer()
+        } else {
+            waitForCatch()
+        }
+    }
+
+    /// The fly ball is up: wait for the catch, but not forever
+    private func waitForCatch() {
+        tagUpTimeout?.cancel()
+        tagUpTimeout = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(TagUpTrigger.catchWindow))
+            guard !Task.isCancelled else { return }
+            tagUp.reset()
+        }
+    }
+
+    private func resetTagUp() {
+        tagUpTimeout?.cancel()
+        tagUp.reset()
     }
 
     // MARK: - Countdown

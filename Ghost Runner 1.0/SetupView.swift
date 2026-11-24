@@ -15,6 +15,8 @@ struct SetupView: View {
     let connectionStatus: String
     let batteryLevel: Int?
     let paused: Bool
+    /// Tag up: the fly ball was hit, waiting for the strike at the catch
+    var ballInAir = false
 
     let onTogglePause: () -> Void
     let onTestBuzzer: () -> Void
@@ -85,7 +87,19 @@ struct SetupView: View {
                         Text(timeCaption)
                             .font(.footnote)
                             .foregroundStyle(Theme.label)
-                        if let cue = StandardTimes.coachStartCues[drill] {
+                        if ballInAir {
+                            Text("BALL IN THE AIR · strike the bat at the catch")
+                                .font(.footnote.weight(.bold))
+                                .foregroundStyle(Theme.connecting)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 4)
+                        } else if TagUpTrigger.applies(to: drill) {
+                            Text("Coach start · hit the fly ball, then strike the bat on the ground when it reaches the glove")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Theme.accent)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 4)
+                        } else if let cue = StandardTimes.coachStartCues[drill] {
                             // Coach start: the fungo hit won't start this one
                             Text("Coach start · strike the bat on the ground \(cue)")
                                 .font(.footnote.weight(.semibold))
