@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Home
 
-/// Game Break Challenge: pick Free Play or Tournament.
+/// Game Break Challenge, screen 1: pick the sport and level (the target), then choose a game.
 /// Opening this screen puts the puck in Game mode; leaving it puts it back to NORMAL.
 struct GameBreakHomeView: View {
     @ObservedObject var bleManager: BLEManager
@@ -47,9 +47,9 @@ struct GameBreakHomeView: View {
                 SensorPill(status: bleManager.connectionStatus, batteryLevel: bleManager.batteryLevel)
             }
 
-            Spacer(minLength: 8)
-            TargetHeader(ms: targetMs, size: 72, detail: "\(GameBreakTarget.drill) · Routine")
-            Spacer(minLength: 12)
+            Spacer()
+            TargetHeader(ms: targetMs, size: 88, detail: "\(GameBreakTarget.drill) · Routine")
+            Spacer()
 
             VStack(spacing: 0) {
                 PickerRow(label: "Sport", options: Sport.allCases.map(\.title), selection: sportBinding)
@@ -61,30 +61,19 @@ struct GameBreakHomeView: View {
                           selection: categoryBinding)
             }
             .card()
-            Spacer(minLength: 12)
+            .padding(.bottom, 24)
 
-            VStack(spacing: 14) {
-                NavigationLink {
-                    FreePlayView(engine: engine, targetMs: targetMs, targetLabel: target.label, simulateTaps: simulateTaps)
-                } label: {
-                    ModeCardLabel(title: "Free Play", subtitle: "Tap to start, tap when you think \(GameBreakScoring.seconds(targetMs)) is up")
-                }
-                NavigationLink {
-                    DuelView(engine: engine, targetMs: targetMs, targetLabel: target.label, simulateTaps: simulateTaps)
-                } label: {
-                    ModeCardLabel(title: "1 v 1", subtitle: "Player 1 vs Player 2, 3 tries each")
-                }
-                NavigationLink {
-                    TournamentView(engine: engine, store: store, targetMs: targetMs, targetLabel: target.label,
-                                   simulateTaps: simulateTaps)
-                } label: {
-                    ModeCardLabel(title: "Tournament",
-                                  subtitle: store.tournament == nil
-                                      ? "Qualifying, Final Four, championship"
-                                      : "Continue the tournament in progress")
-                }
+            NavigationLink {
+                GameSelectView(engine: engine, store: store, targetMs: targetMs, targetLabel: target.label,
+                               simulateTaps: simulateTaps)
+            } label: {
+                Text("Choose a game")
+                    .font(.title3.bold())
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(maxWidth: .infinity, minHeight: 60)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
             }
-            .buttonStyle(SportCardButtonStyle())
+            .buttonStyle(PressableButtonStyle())
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
@@ -121,6 +110,53 @@ struct GameBreakHomeView: View {
             failed: bleManager.gameModeFailed,
             simulated: simulateTaps
         )
+    }
+}
+
+/// Screen 2: the chosen target at the top, then the three games.
+private struct GameSelectView: View {
+    @ObservedObject var engine: GameBreakEngine
+    @ObservedObject var store: TournamentStore
+    let targetMs: Int
+    let targetLabel: String
+    let simulateTaps: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TargetHeader(ms: targetMs, size: 64, detail: targetLabel)
+                .padding(.top, 24)
+            Spacer()
+
+            VStack(spacing: 14) {
+                NavigationLink {
+                    FreePlayView(engine: engine, targetMs: targetMs, targetLabel: targetLabel, simulateTaps: simulateTaps)
+                } label: {
+                    ModeCardLabel(title: "Free Play", subtitle: "Tap to start, tap when you think \(GameBreakScoring.seconds(targetMs)) is up")
+                }
+                NavigationLink {
+                    DuelView(engine: engine, targetMs: targetMs, targetLabel: targetLabel, simulateTaps: simulateTaps)
+                } label: {
+                    ModeCardLabel(title: "1 v 1", subtitle: "Player 1 vs Player 2, 3 tries each")
+                }
+                NavigationLink {
+                    TournamentView(engine: engine, store: store, targetMs: targetMs, targetLabel: targetLabel,
+                                   simulateTaps: simulateTaps)
+                } label: {
+                    ModeCardLabel(title: "Tournament",
+                                  subtitle: store.tournament == nil
+                                      ? "Qualifying, Final Four, championship"
+                                      : "Continue the tournament in progress")
+                }
+            }
+            .buttonStyle(SportCardButtonStyle())
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
+        .navigationTitle("Choose a Game")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { engine.targetMs = targetMs }
     }
 }
 

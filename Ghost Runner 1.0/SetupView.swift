@@ -229,8 +229,10 @@ struct PickerRow: View {
             optionRows
         }
         .scrollBounceBehavior(.basedOnSize)
-        // Tall enough for every drill without scrolling on most phones; scrolls if it can't fit
-        .frame(width: 320, height: min(CGFloat(options.count) * 56 + 12, 460))
+        // Asks for enough height to show every option, but may shrink (and scroll from the top)
+        // when there's less room, instead of clipping the first one
+        .frame(width: 320)
+        .frame(idealHeight: min(CGFloat(options.count) * 52 + 12, 460), maxHeight: 460)
     }
 
     private var optionRows: some View {
