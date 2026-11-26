@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
     @StateObject private var bleManager = BLEManager()
@@ -30,11 +31,26 @@ struct ContentView: View {
     @State private var tagUp = TagUpTrigger()
     @State private var tagUpTimeout: Task<Void, Never>?
 
+    // Pro: log each rep's outcome. Off by default; nothing below runs while it's off.
+    @AppStorage(ProAccess.enabledKey) private var proEnabled = false
+    @AppStorage("proFielder") private var fielderRaw = Fielder.team.rawValue
+    @State private var pendingRep: PendingRep?
+    @State private var lastLogged: Rep?
+    /// The rep behind lastLogged, so Undo can bring the outcome buttons back
+    @State private var lastLoggedFrom: PendingRep?
+    @State private var showTeam = false
+
     var body: some View {
         NavigationStack(path: $path) {
-            SportSelectionView(onGameBreak: { showGameBreak = true })
+            SportSelectionView(onGameBreak: { showGameBreak = true },
+                               onTeam: proEnabled && ProStore.shared.container != nil ? { showTeam = true } : nil)
                 .navigationDestination(isPresented: $showGameBreak) {
                     GameBreakHomeView(bleManager: bleManager)
+                }
+                .navigationDestination(isPresented: $showTeam) {
+                    if let container = ProStore.shared.container {
+                        TeamView().modelContainer(container)
+                    }
                 }
                 .navigationDestination(for: Sport.self) { sport in
                     SetupView(
@@ -52,7 +68,8 @@ struct ContentView: View {
                         paused: paused,
                         ballInAir: tagUp.ballHitAt != nil,
                         onTogglePause: togglePause,
-                        onTestBuzzer: { SoundPlayer.shared.play() }
+                        onTestBuzzer: { SoundPlayer.shared.play() },
+                        pro: proEnabled ? proTraining : nil
                     )
                 }
         }
@@ -64,7 +81,9 @@ struct ContentView: View {
                 paused = false
             }
             resetTagUp()
+            clearRep()
         }
+        .onChange(of: proEnabled) { clearRep() }
         .onChange(of: baseballDrill) { resetTagUp() }
         .onChange(of: softballDrill) { resetTagUp() }
         .onAppear {
@@ -82,7 +101,7 @@ struct ContentView: View {
             if let sport = path.last, TagUpTrigger.applies(to: drill(for: sport)) {
                 tagUpHit()
             } else {
-                startTimer()
+                startRep()
             }
         }
         .onChange(of: isConnected) { _, connected in
@@ -171,6 +190,7 @@ struct ContentView: View {
 
     private func goHome() {
         showGameBreak = false
+        showTeam = false
         path = []
     }
 
@@ -230,7 +250,7 @@ struct ContentView: View {
         }
         if tagUp.hit(at: now) {
             tagUpTimeout?.cancel()
-            startTimer()
+            startRep()
         } else {
             waitForCatch()
         }
@@ -249,6 +269,51 @@ struct ContentView: View {
     private func resetTagUp() {
         tagUpTimeout?.cancel()
         tagUp.reset()
+    }
+
+    // MARK: - Pro rep logging
+
+    /// A hit that starts the ghost runner; with Pro on, it also opens a rep to log
+    private func startRep() {
+        startTimer()
+        guard proEnabled, let sport = path.last else { return }
+        pendingRep = PendingRep(
+            fielder: Fielder(rawValue: fielderRaw),
+            players: ProStore.shared.players(),
+            sport: sport,
+            category: category(for: sport),
+            drill: drill(for: sport),
+            intensity: intensity,
+            runnerTime: selectedDelay,
+            usedCustomTime: customTimeEnabled
+        )
+        lastLogged = nil
+    }
+
+    private var proTraining: ProTraining {
+        ProTraining(
+            fielder: $fielderRaw,
+            hasPendingRep: pendingRep != nil,
+            lastLogged: lastLogged.map { "\($0.fielderLabel) · \($0.outcome.title)" },
+            onOutcome: { outcome in
+                guard let pending = pendingRep else { return }
+                lastLogged = ProStore.shared.record(pending, outcome: outcome)
+                lastLoggedFrom = pending
+                pendingRep = nil
+            },
+            onUndo: {
+                if let rep = lastLogged { ProStore.shared.delete(rep) }
+                lastLogged = nil
+                // Pick again
+                pendingRep = lastLoggedFrom
+            }
+        )
+    }
+
+    private func clearRep() {
+        pendingRep = nil
+        lastLogged = nil
+        lastLoggedFrom = nil
     }
 
     // MARK: - Countdown

@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+import SwiftData
 @testable import Ghost_Runner_1_0
 
 struct StandardTimesTests {
@@ -553,5 +554,79 @@ struct TagUpTriggerTests {
         tagUp.reset()
         let afterReset = tagUp.hit(at: t0.addingTimeInterval(3))
         #expect(!afterReset)
+    }
+}
+
+struct ProFielderTests {
+
+    @Test func fielderIsSavedAndReadBack() {
+        let id = UUID()
+        for fielder in [Fielder.team, .position(.shortstop), .player(id)] {
+            #expect(Fielder(rawValue: fielder.rawValue) == fielder)
+        }
+        #expect(Fielder(rawValue: "") == .team)
+        #expect(Fielder(rawValue: "position:XX") == .team)
+        #expect(Fielder(rawValue: "player:not-a-uuid") == .team)
+    }
+
+    private func pending(_ fielder: Fielder, players: [Player]) -> PendingRep {
+        PendingRep(fielder: fielder, players: players, sport: .baseball, category: "High school (60/90)",
+                   drill: "Home to 1st", intensity: .pressure, runnerTime: 4.2, usedCustomTime: false)
+    }
+
+    @Test func playerRepUsesTheirNameAndPosition() {
+        let jake = Player(name: "Jake", number: "7", position: .shortstop)
+        let rep = pending(.player(jake.id), players: [jake])
+        #expect(rep.playerName == "Jake #7")
+        #expect(rep.position == .shortstop)
+        #expect(Rep(rep, outcome: .out).fielderLabel == "Jake #7 · SS")
+    }
+
+    @Test func positionAndTeamReps() {
+        #expect(Rep(pending(.position(.center), players: []), outcome: .safe).fielderLabel == "Center field")
+        #expect(Rep(pending(.team, players: []), outcome: .safe).fielderLabel == "Team")
+    }
+
+    @Test func deletedPlayerCountsForTheTeam() {
+        let rep = pending(.player(UUID()), players: [])
+        #expect(rep.fielder == .team)
+        #expect(rep.playerName.isEmpty)
+    }
+
+    @Test func rosterSortsByNumberThenName() {
+        let players = [Player(name: "Zed", number: "12"), Player(name: "Amy", number: "3"),
+                       Player(name: "Bo"), Player(name: "Al")]
+        #expect(players.sorted(by: ProStore.rosterOrder).map(\.name) == ["Amy", "Zed", "Al", "Bo"])
+    }
+}
+
+struct RepTallyTests {
+    @Test func errorsCountAsNotOutButAreKeptApart() {
+        let tally = RepTally([.out, .out, .out, .safe, .gloveError, .throwingError, .out, .out])
+        #expect(tally.reps == 8)
+        #expect(tally.outs == 5)
+        #expect(tally.gloveErrors == 1)
+        #expect(tally.throwingErrors == 1)
+        #expect(tally.outRateText == "63%")
+        #expect(RepTally().outRateText == "—")
+    }
+}
+
+@MainActor
+struct ProStoreTests {
+    @Test func recordsAndUndoesReps() throws {
+        let store = ProStore(inMemory: true)
+        let context = try #require(store.container?.mainContext)
+        let pending = PendingRep(fielder: .position(.first), players: [], sport: .softball, category: "High school",
+                                 drill: "Home to 1st", intensity: .routine, runnerTime: 3.5, usedCustomTime: false)
+        let rep = try #require(store.record(pending, outcome: .gloveError))
+        var saved = try context.fetch(FetchDescriptor<Rep>())
+        #expect(saved.count == 1)
+        #expect(saved.first?.outcome == .gloveError)
+        #expect(saved.first?.position == .first)
+        #expect(saved.first?.intensity == .routine)
+        store.delete(rep)
+        saved = try context.fetch(FetchDescriptor<Rep>())
+        #expect(saved.isEmpty)
     }
 }

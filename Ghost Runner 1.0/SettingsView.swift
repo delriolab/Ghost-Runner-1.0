@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     let onTestBuzzer: () -> Void
     @AppStorage("gameBreakSimulateTaps") private var simulateTaps = false
+    @AppStorage(ProAccess.enabledKey) private var proEnabled = false
 
     var body: some View {
         ScrollView {
@@ -26,6 +27,23 @@ struct SettingsView: View {
                 .buttonStyle(PressableButtonStyle())
 
                 Text("Plays the buzzer through the current audio output.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.label)
+                    .padding(.horizontal, 16)
+
+                SectionHeader("Ghost Runner Pro")
+                    .padding(.top, 16)
+
+                Toggle(isOn: $proEnabled) {
+                    Text("Pro features (test)")
+                        .foregroundStyle(Theme.text)
+                }
+                .tint(Theme.accent)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 52)
+                .card()
+
+                Text("Log Out, Safe and errors after each rep, keep a roster and see rep history. Turn off to use the app exactly as before.")
                     .font(.footnote)
                     .foregroundStyle(Theme.label)
                     .padding(.horizontal, 16)

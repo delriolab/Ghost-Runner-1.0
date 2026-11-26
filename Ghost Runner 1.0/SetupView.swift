@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Screen 2: shows the selected time and lets the coach set up the drill.
 struct SetupView: View {
@@ -20,6 +21,8 @@ struct SetupView: View {
 
     let onTogglePause: () -> Void
     let onTestBuzzer: () -> Void
+    /// Pro only: who's fielding and the outcome buttons; nil in the free app
+    var pro: ProTraining? = nil
 
     private var times: SportTimes { StandardTimes.table(for: sport) }
 
@@ -135,6 +138,11 @@ struct SetupView: View {
                 IntensityControl(selection: $intensity)
                     .opacity(customTimeEnabled ? 0.4 : 1)
 
+                if let pro, let container = ProStore.shared.container {
+                    FielderCard(selection: pro.fielder)
+                        .modelContainer(container)
+                }
+
                 CustomTimeCard(isOn: $customTimeEnabled, time: $customTime)
             }
             .padding(.horizontal, 16)
@@ -163,23 +171,29 @@ struct SetupView: View {
             SettingsView(onTestBuzzer: onTestBuzzer)
         }
         .safeAreaInset(edge: .bottom) {
-            // Hits start the timer on their own; Pause is for when the coach is talking
-            Button(action: onTogglePause) {
-                Label(paused ? "Resume" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")
-                    .font(.title2.bold())
-                    .foregroundStyle(paused ? Theme.onAccent : Theme.text)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-                    .background(
-                        paused ? Theme.accent : Theme.card,
-                        in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
-                            .strokeBorder(Theme.divider, lineWidth: paused ? 0 : 1)
-                    )
+            VStack(spacing: 8) {
+                if let pro {
+                    OutcomeBar(pro: pro)
+                        .padding(.horizontal, 16)
+                }
+                // Hits start the timer on their own; Pause is for when the coach is talking
+                Button(action: onTogglePause) {
+                    Label(paused ? "Resume" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")
+                        .font(.title2.bold())
+                        .foregroundStyle(paused ? Theme.onAccent : Theme.text)
+                        .frame(maxWidth: .infinity, minHeight: 60)
+                        .background(
+                            paused ? Theme.accent : Theme.card,
+                            in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+                                .strokeBorder(Theme.divider, lineWidth: paused ? 0 : 1)
+                        )
+                }
+                .buttonStyle(PressableButtonStyle())
+                .padding(.horizontal, 16)
             }
-            .buttonStyle(PressableButtonStyle())
-            .padding(.horizontal, 16)
             .padding(.bottom, 8)
         }
     }
