@@ -10,8 +10,29 @@ struct ProTraining {
     var hasPendingRep: Bool
     /// "Jake #7 · SS · Out" after a tap, until the next rep starts
     var lastLogged: String?
+    /// Voice logging state; nil when voice is off
+    var voice: VoiceDisplay?
     var onOutcome: (RepOutcome) -> Void
     var onUndo: () -> Void
+}
+
+/// The microphone line on the training screen
+struct VoiceDisplay: Equatable {
+    var status: VoiceListener.Status
+    var heard: String
+
+    var text: String {
+        switch status {
+        case .listening: heard.isEmpty ? "Listening · say \u{201C}Jake, out\u{201D} or \u{201C}Shortstop, safe\u{201D}"
+                                       : "Heard \u{201C}\(heard)\u{201D}"
+        case .off: "Voice starting…"
+        case .denied: "Voice is off: allow Microphone and Speech Recognition for Ghost Runner in Settings"
+        case .unavailable: "Voice isn't available right now"
+        }
+    }
+
+    var symbol: String { status == .listening ? "mic.fill" : "mic.slash" }
+    var color: Color { status == .listening ? Theme.accent : Theme.connecting }
 }
 
 /// "Fielding: Jake #7 (SS)" — the whole team, a player, or a position
@@ -59,6 +80,14 @@ struct OutcomeBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            if let voice = pro.voice {
+                Label(voice.text, systemImage: voice.symbol)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(voice.color)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
             if pro.hasPendingRep {
                 HStack(spacing: 8) {
                     outcomeButton(.out, color: Theme.ready, big: true)

@@ -114,6 +114,13 @@ final class Rep {
     var position: Position? { Position(rawValue: positionRaw) }
     var intensity: Intensity? { Intensity(rawValue: intensityRaw) }
 
+    /// Said back after a voice call: "Jake, out", "Shortstop, glove error", "Safe"
+    var spokenSummary: String {
+        let name = playerName.components(separatedBy: " #").first ?? ""
+        let who = name.isEmpty ? (position?.title ?? "") : name
+        return who.isEmpty ? outcome.title : "\(who), \(outcome.title)"
+    }
+
     /// "Jake #7 · SS", "Shortstop", or "Team"
     var fielderLabel: String {
         switch (playerName.isEmpty, position) {
@@ -186,6 +193,14 @@ struct PendingRep: Equatable {
         self.intensity = intensity
         self.runnerTime = runnerTime
         self.usedCustomTime = usedCustomTime
+    }
+}
+
+extension PendingRep {
+    /// The same rep credited to someone else, e.g. when the coach names the fielder in the call
+    func crediting(_ fielder: Fielder, players: [Player]) -> PendingRep {
+        PendingRep(fielder: fielder, players: players, sport: sport, category: category, drill: drill,
+                   intensity: intensity, runnerTime: runnerTime, usedCustomTime: usedCustomTime)
     }
 }
 

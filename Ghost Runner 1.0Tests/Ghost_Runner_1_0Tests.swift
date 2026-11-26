@@ -630,3 +630,104 @@ struct ProStoreTests {
         #expect(saved.isEmpty)
     }
 }
+
+struct VoiceCommandTests {
+    private let jake = VoiceCommandParser.RosterName(id: UUID(), name: "Jake", number: "7")
+    private let mia = VoiceCommandParser.RosterName(id: UUID(), name: "Mia Lopez", number: "12")
+    private let jakeB = VoiceCommandParser.RosterName(id: UUID(), name: "Jake Brown", number: "22")
+    private var roster: [VoiceCommandParser.RosterName] { [jake, mia] }
+
+    private func outcome(_ text: String) -> RepOutcome? {
+        if case .outcome(let o)? = VoiceCommandParser.parse(text, roster: roster)?.action { return o }
+        return nil
+    }
+
+    private func fielder(_ text: String, roster: [VoiceCommandParser.RosterName]? = nil) -> Fielder? {
+        VoiceCommandParser.parse(text, roster: roster ?? self.roster)?.fielder
+    }
+
+    @Test func theFiveCalls() {
+        #expect(outcome("Out") == .out)
+        #expect(outcome("Safe") == .safe)
+        #expect(outcome("Got em") == .out)
+        #expect(outcome("Glove error") == .gloveError)
+        #expect(outcome("Throwing error") == .throwingError)
+    }
+
+    @Test func howTheRecognizerMightWriteThem() {
+        #expect(outcome("Got 'em!") == .out)
+        #expect(outcome("Got’em") == .out)
+        #expect(outcome("gotem") == .out)
+        #expect(outcome("got him") == .out)
+        #expect(outcome("Throw error") == .throwingError)
+        #expect(outcome("glove errors") == .gloveError)
+        #expect(outcome("OUT.") == .out)
+    }
+
+    @Test func wordsThatAreNotCalls() {
+        #expect(outcome("throwing") == nil)            // needs "error"
+        #expect(outcome("glove") == nil)
+        #expect(outcome("error") == nil)              // which kind?
+        #expect(outcome("about") == nil)              // contains "out"
+        #expect(outcome("shout") == nil)
+        #expect(outcome("got it") == nil)
+        #expect(outcome("") == nil)
+    }
+
+    @Test func conversationIsIgnored() {
+        #expect(outcome("you're out of position let's go again") == nil)
+        #expect(outcome("that throw needs to be safe and on target") == nil)
+    }
+
+    @Test func lastCallWins() {
+        #expect(outcome("out no safe") == .safe)
+    }
+
+    @Test func playersByNameOrNumber() {
+        #expect(fielder("Jake, out") == .player(jake.id))
+        #expect(fielder("Out Jake") == .player(jake.id))
+        #expect(fielder("Mia got em") == .player(mia.id))          // first name is enough when unique
+        #expect(fielder("Mia Lopez safe") == .player(mia.id))
+        #expect(fielder("number 7 throwing error") == .player(jake.id))
+        #expect(fielder("#12 out") == .player(mia.id))
+        #expect(fielder("Safe") == nil)
+    }
+
+    @Test func sharedFirstNamesNeedTheFullName() {
+        let both = [jake, jakeB]
+        #expect(fielder("Jake Brown out", roster: both) == .player(jakeB.id))
+        #expect(fielder("Jake out", roster: both) == .player(jake.id))   // "Jake" is a full name too
+    }
+
+    @Test func positions() {
+        #expect(fielder("Shortstop got em") == .position(.shortstop))
+        #expect(fielder("short out") == .position(.shortstop))
+        #expect(fielder("second baseman glove error") == .position(.second))
+        #expect(fielder("3rd base out") == .position(.third))
+        #expect(fielder("centerfield safe") == .position(.center))
+        #expect(fielder("right field throwing error") == .position(.right))
+        #expect(fielder("pitcher out") == .position(.pitcher))
+    }
+
+    @Test func theFielderIsWhoeverIsNamedFirst() {
+        #expect(fielder("shortstop out at first base") == .position(.shortstop))
+    }
+
+    @Test func undo() {
+        #expect(VoiceCommandParser.parse("Undo")?.action == .undo)
+        #expect(VoiceCommandParser.parse("scratch that")?.action == .undo)
+    }
+
+    @Test func roundTripOfTheSpokenConfirmation() {
+        let p = PendingRep(fielder: .position(.shortstop), players: [], sport: .baseball, category: "13U (54/80)",
+                           drill: "Home to 1st", intensity: .routine, runnerTime: 4.4, usedCustomTime: false)
+        #expect(Rep(p, outcome: .gloveError).spokenSummary == "Shortstop, Glove error")
+        let player = Player(name: "Jake", number: "7", position: .shortstop)
+        let q = p.crediting(.player(player.id), players: [player])
+        #expect(Rep(q, outcome: .out).spokenSummary == "Jake, Out")
+        #expect(q.category == "13U (54/80)")
+        let team = PendingRep(fielder: .team, players: [], sport: .baseball, category: "", drill: "",
+                              intensity: .routine, runnerTime: 0, usedCustomTime: false)
+        #expect(Rep(team, outcome: .safe).spokenSummary == "Safe")
+    }
+}

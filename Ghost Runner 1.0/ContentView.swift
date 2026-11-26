@@ -39,6 +39,18 @@ struct ContentView: View {
     /// The rep behind lastLogged, so Undo can bring the outcome buttons back
     @State private var lastLoggedFrom: PendingRep?
     @State private var showTeam = false
+    /// When the open rep started; voice calls count for `voiceWindow` after the bat strike
+    @State private var pendingRepAt = Date.distantPast
+    // Pro voice: hands-free logging on the training screen
+    @AppStorage("proVoice") private var voiceEnabled = true
+    @AppStorage("proSayItBack") private var sayItBack = true
+    @StateObject private var voice = VoiceListener()
+    private static let voiceWindow: TimeInterval = 20
+
+    /// Listen only on the training screen, in the foreground, with Pro voice on
+    private var shouldListen: Bool {
+        proEnabled && voiceEnabled && !path.isEmpty && !showGameBreak && scenePhase == .active
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -84,9 +96,11 @@ struct ContentView: View {
             clearRep()
         }
         .onChange(of: proEnabled) { clearRep() }
+        .onChange(of: shouldListen) { _, listen in updateListening(listen) }
         .onChange(of: baseballDrill) { resetTagUp() }
         .onChange(of: softballDrill) { resetTagUp() }
         .onAppear {
+            voice.onCommand = handleVoice
             screenAwake.update(connected: isConnected)
             // Hand the launch delay to BLEManager so it is sent as soon as the sensor connects
             bleManager.sendDelay(selectedDelay)
@@ -234,6 +248,8 @@ struct ContentView: View {
             stopTimer()
             resetTagUp()
         }
+        // Voice calls don't count while paused, and talk during the pause is forgotten
+        voice.newCall()
     }
 
     // MARK: - Tag up
@@ -287,7 +303,10 @@ struct ContentView: View {
             runnerTime: selectedDelay,
             usedCustomTime: customTimeEnabled
         )
+        pendingRepAt = Date()
         lastLogged = nil
+        // Only what's said after the bat strike counts
+        voice.newCall()
     }
 
     private var proTraining: ProTraining {
@@ -295,19 +314,58 @@ struct ContentView: View {
             fielder: $fielderRaw,
             hasPendingRep: pendingRep != nil,
             lastLogged: lastLogged.map { "\($0.fielderLabel) · \($0.outcome.title)" },
-            onOutcome: { outcome in
-                guard let pending = pendingRep else { return }
-                lastLogged = ProStore.shared.record(pending, outcome: outcome)
-                lastLoggedFrom = pending
-                pendingRep = nil
-            },
-            onUndo: {
-                if let rep = lastLogged { ProStore.shared.delete(rep) }
-                lastLogged = nil
-                // Pick again
-                pendingRep = lastLoggedFrom
-            }
+            voice: voiceEnabled ? VoiceDisplay(status: voice.status, heard: voice.heard) : nil,
+            onOutcome: { logOutcome($0) },
+            onUndo: undoLastRep
         )
+    }
+
+    @discardableResult
+    private func logOutcome(_ outcome: RepOutcome, credit fielder: Fielder? = nil) -> Rep? {
+        guard var pending = pendingRep else { return nil }
+        if let fielder {
+            // The coach named who made the play: credit them, and keep them as the pick
+            pending = pending.crediting(fielder, players: ProStore.shared.players())
+            fielderRaw = pending.fielder.rawValue
+        }
+        lastLogged = ProStore.shared.record(pending, outcome: outcome)
+        lastLoggedFrom = pending
+        pendingRep = nil
+        return lastLogged
+    }
+
+    private func undoLastRep() {
+        if let rep = lastLogged { ProStore.shared.delete(rep) }
+        lastLogged = nil
+        // Pick again
+        pendingRep = lastLoggedFrom
+    }
+
+    // MARK: - Pro voice
+
+    private func updateListening(_ listen: Bool) {
+        if listen {
+            voice.roster = ProStore.shared.players().map {
+                VoiceCommandParser.RosterName(id: $0.id, name: $0.name, number: $0.number)
+            }
+            Task { await voice.start() }
+        } else {
+            voice.stop()
+        }
+    }
+
+    private func handleVoice(_ command: VoiceCommand) {
+        guard proEnabled, !paused else { return }
+        switch command.action {
+        case .outcome(let outcome):
+            guard pendingRep != nil, Date().timeIntervalSince(pendingRepAt) <= Self.voiceWindow,
+                  let rep = logOutcome(outcome, credit: command.fielder) else { return }
+            if sayItBack { voice.say(rep.spokenSummary) }
+        case .undo:
+            guard lastLogged != nil else { return }
+            undoLastRep()
+            if sayItBack { voice.say("Undone") }
+        }
     }
 
     private func clearRep() {

@@ -5,6 +5,8 @@ struct SettingsView: View {
     let onTestBuzzer: () -> Void
     @AppStorage("gameBreakSimulateTaps") private var simulateTaps = false
     @AppStorage(ProAccess.enabledKey) private var proEnabled = false
+    @AppStorage("proVoice") private var voiceEnabled = true
+    @AppStorage("proSayItBack") private var sayItBack = true
 
     var body: some View {
         ScrollView {
@@ -47,6 +49,33 @@ struct SettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(Theme.label)
                     .padding(.horizontal, 16)
+
+                if proEnabled {
+                    VStack(spacing: 0) {
+                        Toggle(isOn: $voiceEnabled) {
+                            Text("Voice logging")
+                                .foregroundStyle(Theme.text)
+                        }
+                        .frame(minHeight: 52)
+                        Rectangle()
+                            .fill(Theme.divider)
+                            .frame(height: 0.5)
+                        Toggle(isOn: $sayItBack) {
+                            Text("Say it back")
+                                .foregroundStyle(Theme.text)
+                        }
+                        .frame(minHeight: 52)
+                        .disabled(!voiceEnabled)
+                    }
+                    .tint(Theme.accent)
+                    .padding(.horizontal, 16)
+                    .card()
+
+                    Text("After the bat strike, call the play: \u{201C}Jake, out\u{201D}, \u{201C}Shortstop, got em\u{201D}, \u{201C}Safe\u{201D}, \u{201C}Glove error\u{201D}, \u{201C}Throwing error, number 7\u{201D}. Say \u{201C}Undo\u{201D} to take one back. Say it back repeats each call out loud.")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.label)
+                        .padding(.horizontal, 16)
+                }
 
                 SectionHeader("Developer")
                     .padding(.top, 16)
