@@ -813,6 +813,17 @@ struct VoiceDoublePlayAndPauseTests {
         #expect(parse("turn to") == VoiceCommand(fielder: nil, action: nil, turnTwo: true))
     }
 
+    @Test func letsGetTwoMeansTurnTwo() {
+        #expect(parse("Let's get two") == VoiceCommand(fielder: nil, action: nil, turnTwo: true))
+        #expect(parse("lets get 2") == VoiceCommand(fielder: nil, action: nil, turnTwo: true))
+        #expect(parse("let’s get two, short")?.fielder == .doublePlay(.shortstop))
+        #expect(parse("let's get two 5")?.fielder == .doublePlay(.third))
+        #expect(parse("get two") == VoiceCommand(fielder: nil, action: nil, turnTwo: true))
+        #expect(parse("let's get two short stop safe") ==
+                VoiceCommand(fielder: .doublePlay(.shortstop), action: .safe, turnTwo: true))
+        #expect(parse("let's get two more reps") == nil)       // talk, not a call
+    }
+
     @Test func noDoublePlayFromTheOutfield() {
         #expect(parse("turn two 8") == nil)
         #expect(parse("turn two pitcher") == nil)

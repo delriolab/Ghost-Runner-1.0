@@ -4,7 +4,7 @@ import Foundation
 //
 // Who's fielding: a scorebook number ("6"), a position word ("short") or a player's name ("Jake").
 // It sticks until another one is said. The only result to call is "safe": a rep with no call is an
-// out. "Undo" takes back the last rep. "Turn two" or "roll it" with where it's fielded calls a double
+// out. "Undo" takes back the last rep. "Turn two", "roll it" or "let's get two" with where it's fielded calls a double
 // play (5 → 5-4-3, 6 → 6-4-3, 4 → 4-6-3, 3 → 3-6-3). "Ghost Runner pause" / "Ghost Runner resume".
 // A call is only those words; anything with other words in it is talk and is ignored.
 
@@ -24,8 +24,8 @@ struct VoiceCommand: Equatable {
 }
 
 enum VoiceCommandParser {
-    /// "Turn two short stop safe"; anything longer is conversation
-    static let maxWords = 5
+    /// "Let's get two short stop safe"; anything longer is conversation
+    static let maxWords = 6
 
     struct RosterName: Equatable {
         let id: UUID
@@ -73,7 +73,7 @@ enum VoiceCommandParser {
 
     /// Words to help the recognizer: the numbers, positions, roster names and calls
     static func vocabulary(roster: [RosterName]) -> [String] {
-        ["safe", "undo", "turn two", "roll it", "Ghost Runner pause", "Ghost Runner resume"]
+        ["safe", "undo", "turn two", "roll it", "let's get two", "Ghost Runner pause", "Ghost Runner resume"]
             + (1...9).map(String.init)
             + positionWords.map(\.phrase)
             + roster.map(\.name)
@@ -94,9 +94,12 @@ enum VoiceCommandParser {
         return words.flatMap { (joined[$0] ?? $0).split(separator: " ").map(String.init) }
     }
 
-    /// "Turn two" and how it may come back; "roll it" means the same
+    /// "Turn two" and how it may come back; "roll it" and "let's get two" mean the same.
+    /// Longer phrases first, so "let's get two" isn't read as "get two" plus a stray word.
     private static let turnTwoPhrases: [[String]] = [
+        ["lets", "get", "two"], ["lets", "get", "2"], ["lets", "get", "to"], ["let", "us", "get", "two"],
         ["turn", "two"], ["turn", "2"], ["turn", "to"], ["turn", "too"], ["turn", "it"],
+        ["get", "two"], ["get", "2"], ["get", "to"],
         ["roll", "it"], ["role", "it"], ["rollit"],
     ]
 
