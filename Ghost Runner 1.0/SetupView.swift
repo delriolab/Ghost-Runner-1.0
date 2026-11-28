@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftData
 
 /// Screen 2: shows the selected time and lets the coach set up the drill.
 struct SetupView: View {
@@ -138,9 +137,8 @@ struct SetupView: View {
                 IntensityControl(selection: $intensity)
                     .opacity(customTimeEnabled ? 0.4 : 1)
 
-                if let pro, let container = ProStore.shared.container {
+                if let pro {
                     FielderCard(selection: pro.fielder)
-                        .modelContainer(container)
                 }
 
                 CustomTimeCard(isOn: $customTimeEnabled, time: $customTime)

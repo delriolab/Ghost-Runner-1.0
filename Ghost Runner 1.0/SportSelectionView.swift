@@ -3,8 +3,8 @@ import SwiftUI
 /// Screen 1: pick Baseball, Softball, or Game Break Challenge.
 struct SportSelectionView: View {
     var onGameBreak: () -> Void = {}
-    /// Pro only: a card into the team and rep history
-    var onTeam: (() -> Void)? = nil
+    /// Pro only: a card into rep history
+    var onRepHistory: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,9 +54,9 @@ struct SportSelectionView: View {
                 }
                 .buttonStyle(SportCardButtonStyle())
 
-                if let onTeam {
-                    Button(action: onTeam) {
-                        TeamCardLabel()
+                if let onRepHistory {
+                    Button(action: onRepHistory) {
+                        RepHistoryCardLabel()
                     }
                     .buttonStyle(SportCardButtonStyle())
                 }

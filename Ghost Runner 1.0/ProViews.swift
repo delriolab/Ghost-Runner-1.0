@@ -22,7 +22,7 @@ struct VoiceDisplay: Equatable {
 
     var text: String {
         switch status {
-        case .listening: "Listening · fielder 1\u{2013}9 or a name · \u{201C}safe\u{201D}"
+        case .listening: "Listening · fielder 1\u{2013}9 · \u{201C}safe\u{201D}"
         case .off: "Voice starting…"
         case .denied: "Voice is off: allow Microphone and Speech Recognition for Ghost Runner in Settings"
         case .unavailable: "Voice isn't available right now"
@@ -33,23 +33,14 @@ struct VoiceDisplay: Equatable {
     var color: Color { status == .listening ? Theme.accent : Theme.connecting }
 }
 
-/// "Fielding: Jake #7 (SS)" — the whole team, a player, or a position
+/// "Fielding: 6 · Shortstop" — a position, or the whole team (player names are on hold for now)
 struct FielderCard: View {
     @Binding var selection: String
-    @Query private var players: [Player]
-
-    private var roster: [Player] { players.sorted(by: ProStore.rosterOrder) }
 
     private static let teamTitle = "Whole team"
 
-    private func title(_ player: Player) -> String {
-        player.position.map { "\(player.displayName) (\($0.rawValue))" } ?? player.displayName
-    }
-
     private var options: [(title: String, fielder: Fielder)] {
-        [(Self.teamTitle, .team)]
-            + Position.allCases.map { ($0.numberedTitle, .position($0)) }
-            + roster.map { (title($0), .player($0.id)) }
+        [(Self.teamTitle, .team)] + Position.allCases.map { ($0.numberedTitle, .position($0)) }
     }
 
     private var titleBinding: Binding<String> {
@@ -118,147 +109,6 @@ struct OutcomeBar: View {
                 .card()
             }
         }
-    }
-}
-
-// MARK: - Team
-
-/// The roster, plus the way into rep history
-struct TeamView: View {
-    @Environment(\.modelContext) private var context
-    @Query private var players: [Player]
-    @State private var editing: Player?
-    @State private var adding = false
-
-    private var roster: [Player] { players.sorted(by: ProStore.rosterOrder) }
-
-    var body: some View {
-        List {
-            Section {
-                NavigationLink {
-                    // Pushed screens don't always inherit the store, so hand it over
-                    RepHistoryView().modelContainer(context.container)
-                } label: {
-                    Label("Rep history", systemImage: "list.bullet.rectangle")
-                        .foregroundStyle(Theme.text)
-                }
-                .listRowBackground(Theme.card)
-            }
-
-            Section {
-                if roster.isEmpty {
-                    Text("No players yet. Add your roster to log reps by name; positions work without one.")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.label)
-                        .listRowBackground(Theme.card)
-                }
-                ForEach(roster) { player in
-                    Button { editing = player } label: {
-                        HStack {
-                            Text(player.displayName)
-                                .foregroundStyle(Theme.text)
-                            Spacer()
-                            Text(player.position?.title ?? "")
-                                .foregroundStyle(Theme.label)
-                        }
-                    }
-                    .listRowBackground(Theme.card)
-                }
-                .onDelete { offsets in
-                    for i in offsets { context.delete(roster[i]) }
-                    try? context.save()
-                }
-            } header: {
-                Text("Roster")
-                    .foregroundStyle(Theme.label)
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .background(Theme.background)
-        .navigationTitle("Team")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Add player", systemImage: "plus") { adding = true }
-            }
-        }
-        .sheet(isPresented: $adding) {
-            PlayerEditor(player: nil).modelContainer(context.container)
-        }
-        .sheet(item: $editing) { player in
-            PlayerEditor(player: player).modelContainer(context.container)
-        }
-    }
-}
-
-/// Add or edit a player: name, number, main position
-private struct PlayerEditor: View {
-    let player: Player?
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var number = ""
-    @State private var position: Position?
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Name", text: $name)
-                        .textInputAutocapitalization(.words)
-                    TextField("Number", text: $number)
-                        .keyboardType(.numberPad)
-                }
-                .listRowBackground(Theme.card)
-                Section("Main position") {
-                    Picker("Position", selection: $position) {
-                        Text("None").tag(Position?.none)
-                        ForEach(Position.allCases) { p in
-                            Text(p.title).tag(Position?.some(p))
-                        }
-                    }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                }
-                .listRowBackground(Theme.card)
-            }
-            .scrollContentBackground(.hidden)
-            .background(Theme.background)
-            .navigationTitle(player == nil ? "Add Player" : "Edit Player")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .onAppear {
-                if let player {
-                    name = player.name
-                    number = player.number
-                    position = player.position
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-        .tint(Theme.accent)
-    }
-
-    private func save() {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        let num = number.trimmingCharacters(in: .whitespaces)
-        if let player {
-            player.name = trimmed
-            player.number = num
-            player.position = position
-        } else {
-            context.insert(Player(name: trimmed, number: num, position: position))
-        }
-        try? context.save()
-        dismiss()
     }
 }
 
@@ -367,11 +217,11 @@ private struct RepRow: View {
 
 // MARK: - Home and Settings
 
-/// Home screen card into the team (Pro only)
-struct TeamCardLabel: View {
+/// Home screen card into rep history (Pro only)
+struct RepHistoryCardLabel: View {
     var body: some View {
         HStack(alignment: .center) {
-            Text("Team & Reps")
+            Text("Rep History")
                 .font(.title2.weight(.heavy))
                 .foregroundStyle(Theme.text)
             Text("PRO")

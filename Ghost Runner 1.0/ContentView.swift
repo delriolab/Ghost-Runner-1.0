@@ -42,7 +42,7 @@ struct ContentView: View {
     @State private var outTimer: Task<Void, Never>?
     /// Counts reps, so the out timer only logs the rep it was started for
     @State private var repSerial = 0
-    @State private var showTeam = false
+    @State private var showRepHistory = false
     // Pro voice: hands-free logging on the training screen
     @AppStorage("proVoice") private var voiceEnabled = true
     @AppStorage("proSayItBack") private var sayItBack = true
@@ -56,13 +56,13 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $path) {
             SportSelectionView(onGameBreak: { showGameBreak = true },
-                               onTeam: proEnabled && ProStore.shared.container != nil ? { showTeam = true } : nil)
+                               onRepHistory: proEnabled && ProStore.shared.container != nil ? { showRepHistory = true } : nil)
                 .navigationDestination(isPresented: $showGameBreak) {
                     GameBreakHomeView(bleManager: bleManager)
                 }
-                .navigationDestination(isPresented: $showTeam) {
+                .navigationDestination(isPresented: $showRepHistory) {
                     if let container = ProStore.shared.container {
-                        TeamView().modelContainer(container)
+                        RepHistoryView().modelContainer(container)
                     }
                 }
                 .navigationDestination(for: Sport.self) { sport in
@@ -205,7 +205,7 @@ struct ContentView: View {
 
     private func goHome() {
         showGameBreak = false
-        showTeam = false
+        showRepHistory = false
         path = []
     }
 
@@ -297,8 +297,10 @@ struct ContentView: View {
         logPendingAsOut()
         startTimer()
         guard proEnabled, let sport = path.last else { return }
+        // Player names are on hold; a player picked in an earlier test build counts for the team
+        let saved = Fielder(rawValue: fielderRaw)
         let pending = PendingRep(
-            fielder: Fielder(rawValue: fielderRaw),
+            fielder: saved.playerID == nil ? saved : .team,
             players: ProStore.shared.players(),
             sport: sport,
             category: category(for: sport),
@@ -379,9 +381,8 @@ struct ContentView: View {
 
     private func updateListening(_ listen: Bool) {
         if listen {
-            voice.roster = ProStore.shared.players().map {
-                VoiceCommandParser.RosterName(id: $0.id, name: $0.name)
-            }
+            // Positions only for now; player names are on hold
+            voice.roster = []
             Task { await voice.start() }
         } else {
             voice.stop()
