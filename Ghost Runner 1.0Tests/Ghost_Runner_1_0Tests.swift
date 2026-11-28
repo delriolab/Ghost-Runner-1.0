@@ -583,7 +583,7 @@ struct ProFielderTests {
     }
 
     @Test func positionAndTeamReps() {
-        #expect(Rep(pending(.position(.center), players: []), outcome: .safe).fielderLabel == "Center field")
+        #expect(Rep(pending(.position(.center), players: []), outcome: .safe).fielderLabel == "8 · Center field")
         #expect(Rep(pending(.team, players: []), outcome: .safe).fielderLabel == "Team")
     }
 
@@ -631,103 +631,117 @@ struct ProStoreTests {
     }
 }
 
+struct PositionNumberTests {
+    @Test func scorebookNumbers() {
+        #expect(Position.allCases.map(\.number) == Array(1...9))
+        #expect(Position(number: 1) == .pitcher)
+        #expect(Position(number: 6) == .shortstop)
+        #expect(Position(number: 9) == .right)
+        #expect(Position(number: 0) == nil)
+        #expect(Position(number: 10) == nil)
+        #expect(Position.shortstop.numberedTitle == "6 · Shortstop")
+    }
+}
+
+struct RepCallTests {
+    @Test func uncalledRepIsAnOutEightSecondsAfterTheBuzzer() {
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        #expect(RepCall.outDeadline(start: start, runnerTime: 4.3).timeIntervalSince(start) == 12.3)
+    }
+
+    @Test func aLateSafeCanStillFixIt() {
+        let logged = Date(timeIntervalSinceReferenceDate: 0)
+        #expect(RepCall.canChangeToSafe(loggedAt: logged, now: logged.addingTimeInterval(10)))
+        #expect(!RepCall.canChangeToSafe(loggedAt: logged, now: logged.addingTimeInterval(16)))
+    }
+
+    @MainActor
+    @Test func changingALoggedOutToSafe() throws {
+        let store = ProStore(inMemory: true)
+        let p = PendingRep(fielder: .position(.shortstop), players: [], sport: .baseball, category: "13U (54/80)",
+                           drill: "Home to 1st", intensity: .routine, runnerTime: 4.4, usedCustomTime: false)
+        let rep = try #require(store.record(p, outcome: .out))
+        store.change(rep, to: .safe)
+        let saved = try #require(store.container?.mainContext).fetch(FetchDescriptor<Rep>())
+        #expect(saved.map(\.outcome) == [.safe])
+    }
+}
+
 struct VoiceCommandTests {
-    private let jake = VoiceCommandParser.RosterName(id: UUID(), name: "Jake", number: "7")
-    private let mia = VoiceCommandParser.RosterName(id: UUID(), name: "Mia Lopez", number: "12")
-    private let jakeB = VoiceCommandParser.RosterName(id: UUID(), name: "Jake Brown", number: "22")
+    private let jake = VoiceCommandParser.RosterName(id: UUID(), name: "Jake")
+    private let mia = VoiceCommandParser.RosterName(id: UUID(), name: "Mia Lopez")
+    private let jakeB = VoiceCommandParser.RosterName(id: UUID(), name: "Jake Brown")
     private var roster: [VoiceCommandParser.RosterName] { [jake, mia] }
 
-    private func outcome(_ text: String) -> RepOutcome? {
-        if case .outcome(let o)? = VoiceCommandParser.parse(text, roster: roster)?.action { return o }
-        return nil
+    private func parse(_ text: String, roster: [VoiceCommandParser.RosterName]? = nil) -> VoiceCommand? {
+        VoiceCommandParser.parse(text, roster: roster ?? self.roster)
     }
 
-    private func fielder(_ text: String, roster: [VoiceCommandParser.RosterName]? = nil) -> Fielder? {
-        VoiceCommandParser.parse(text, roster: roster ?? self.roster)?.fielder
+    private func fielder(_ text: String) -> Fielder? { parse(text)?.fielder }
+
+    @Test func numbersOneToNine() {
+        let expected: [(String, Position)] = [("1", .pitcher), ("2", .catcher), ("3", .first), ("4", .second),
+                                              ("5", .third), ("6", .shortstop), ("7", .left), ("8", .center), ("9", .right)]
+        for (said, position) in expected {
+            #expect(fielder(said) == .position(position), "\(said)")
+        }
+        #expect(fielder("Six") == .position(.shortstop))
+        #expect(fielder("seven.") == .position(.left))
+        #expect(parse("6")?.action == nil)                         // naming the fielder isn't a result
     }
 
-    @Test func theFiveCalls() {
-        #expect(outcome("Out") == .out)
-        #expect(outcome("Safe") == .safe)
-        #expect(outcome("Got em") == .out)
-        #expect(outcome("Glove error") == .gloveError)
-        #expect(outcome("Throwing error") == .throwingError)
+    @Test func numbersTheRecognizerMightMishear() {
+        #expect(fielder("to") == .position(.catcher))
+        #expect(fielder("Too") == .position(.catcher))
+        #expect(fielder("for") == .position(.second))
+        #expect(fielder("ate") == .position(.center))
+        #expect(fielder("won") == .position(.pitcher))
+        #expect(fielder("for safe") == .position(.second))
     }
 
-    @Test func howTheRecognizerMightWriteThem() {
-        #expect(outcome("Got 'em!") == .out)
-        #expect(outcome("Got’em") == .out)
-        #expect(outcome("gotem") == .out)
-        #expect(outcome("got him") == .out)
-        #expect(outcome("Throw error") == .throwingError)
-        #expect(outcome("glove errors") == .gloveError)
-        #expect(outcome("OUT.") == .out)
+    @Test func numbersInsideOtherTalkAreIgnored() {
+        #expect(parse("go to first") == nil)
+        #expect(parse("one more time") == nil)
+        #expect(parse("time for water") == nil)
+        #expect(parse("nice play short") == nil)
+        #expect(parse("good job Jake") == nil)
     }
 
-    @Test func wordsThatAreNotCalls() {
-        #expect(outcome("throwing") == nil)            // needs "error"
-        #expect(outcome("glove") == nil)
-        #expect(outcome("error") == nil)              // which kind?
-        #expect(outcome("about") == nil)              // contains "out"
-        #expect(outcome("shout") == nil)
-        #expect(outcome("got it") == nil)
-        #expect(outcome("") == nil)
-    }
-
-    @Test func conversationIsIgnored() {
-        #expect(outcome("you're out of position let's go again") == nil)
-        #expect(outcome("that throw needs to be safe and on target") == nil)
-    }
-
-    @Test func lastCallWins() {
-        #expect(outcome("out no safe") == .safe)
-    }
-
-    @Test func playersByNameOrNumber() {
-        #expect(fielder("Jake, out") == .player(jake.id))
-        #expect(fielder("Out Jake") == .player(jake.id))
-        #expect(fielder("Mia got em") == .player(mia.id))          // first name is enough when unique
-        #expect(fielder("Mia Lopez safe") == .player(mia.id))
-        #expect(fielder("number 7 throwing error") == .player(jake.id))
-        #expect(fielder("#12 out") == .player(mia.id))
-        #expect(fielder("Safe") == nil)
+    @Test func positionWordsAndNames() {
+        #expect(fielder("short") == .position(.shortstop))
+        #expect(fielder("Shortstop") == .position(.shortstop))
+        #expect(fielder("center field") == .position(.center))
+        #expect(fielder("second base") == .position(.second))
+        #expect(fielder("pitcher") == .position(.pitcher))
+        #expect(fielder("Jake") == .player(jake.id))
+        #expect(fielder("Mia") == .player(mia.id))
+        #expect(fielder("Mia Lopez") == .player(mia.id))
     }
 
     @Test func sharedFirstNamesNeedTheFullName() {
         let both = [jake, jakeB]
-        #expect(fielder("Jake Brown out", roster: both) == .player(jakeB.id))
-        #expect(fielder("Jake out", roster: both) == .player(jake.id))   // "Jake" is a full name too
+        #expect(parse("Jake Brown", roster: both)?.fielder == .player(jakeB.id))
+        #expect(parse("Jake", roster: both)?.fielder == .player(jake.id))   // "Jake" is a full name
+        #expect(parse("Brown", roster: both) == nil)
     }
 
-    @Test func positions() {
-        #expect(fielder("Shortstop got em") == .position(.shortstop))
-        #expect(fielder("short out") == .position(.shortstop))
-        #expect(fielder("second baseman glove error") == .position(.second))
-        #expect(fielder("3rd base out") == .position(.third))
-        #expect(fielder("centerfield safe") == .position(.center))
-        #expect(fielder("right field throwing error") == .position(.right))
-        #expect(fielder("pitcher out") == .position(.pitcher))
-    }
-
-    @Test func theFielderIsWhoeverIsNamedFirst() {
-        #expect(fielder("shortstop out at first base") == .position(.shortstop))
+    @Test func safe() {
+        #expect(parse("Safe") == VoiceCommand(fielder: nil, action: .safe))
+        #expect(parse("safe!")?.action == .safe)
+        #expect(parse("6 safe") == VoiceCommand(fielder: .position(.shortstop), action: .safe))
+        #expect(parse("Jake safe") == VoiceCommand(fielder: .player(jake.id), action: .safe))
     }
 
     @Test func undo() {
-        #expect(VoiceCommandParser.parse("Undo")?.action == .undo)
-        #expect(VoiceCommandParser.parse("scratch that")?.action == .undo)
+        #expect(parse("Undo") == VoiceCommand(fielder: nil, action: .undo))
+        #expect(parse("scratch that")?.action == .undo)
     }
 
-    @Test func roundTripOfTheSpokenConfirmation() {
-        let p = PendingRep(fielder: .position(.shortstop), players: [], sport: .baseball, category: "13U (54/80)",
-                           drill: "Home to 1st", intensity: .routine, runnerTime: 4.4, usedCustomTime: false)
-        #expect(Rep(p, outcome: .gloveError).spokenSummary == "Shortstop, Glove error")
-        let player = Player(name: "Jake", number: "7", position: .shortstop)
-        let q = p.crediting(.player(player.id), players: [player])
-        #expect(Rep(q, outcome: .out).spokenSummary == "Jake, Out")
-        #expect(q.category == "13U (54/80)")
-        let team = PendingRep(fielder: .team, players: [], sport: .baseball, category: "", drill: "",
-                              intensity: .routine, runnerTime: 0, usedCustomTime: false)
-        #expect(Rep(team, outcome: .safe).spokenSummary == "Safe")
+    @Test func everythingElseIsIgnored() {
+        #expect(parse("out") == nil)                               // outs aren't called
+        #expect(parse("nice play") == nil)
+        #expect(parse("you're out of position, let's go again") == nil)
+        #expect(parse("let's play it safe out there") == nil)      // too long to be a call
+        #expect(parse("") == nil)
     }
 }

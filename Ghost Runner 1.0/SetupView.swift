@@ -195,6 +195,9 @@ struct SetupView: View {
                 .padding(.horizontal, 16)
             }
             .padding(.bottom, 8)
+            // Pro's bar is taller; keep the scrolling cards from showing through it
+            .padding(.top, pro == nil ? 0 : 8)
+            .background(pro == nil ? Color.clear : Theme.background)
         }
     }
 }

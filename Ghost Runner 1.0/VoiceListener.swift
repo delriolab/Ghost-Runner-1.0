@@ -23,8 +23,6 @@ final class VoiceListener: ObservableObject {
     }
 
     @Published private(set) var status: Status = .off
-    /// What it heard last, shown small on screen so the coach can see it working
-    @Published private(set) var heard = ""
 
     var onCommand: ((VoiceCommand) -> Void)?
     var roster: [VoiceCommandParser.RosterName] = []
@@ -102,7 +100,6 @@ final class VoiceListener: ObservableObject {
             try? session.setActive(true)
         }
         status = .off
-        heard = ""
     }
 
     /// Forget anything said so far (e.g. at the bat strike, so chatter before it doesn't count)
@@ -144,7 +141,6 @@ final class VoiceListener: ObservableObject {
             }
             return
         }
-        heard = text
         settle?.cancel()
         if isFinal {
             finishCall(text)

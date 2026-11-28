@@ -2,136 +2,115 @@ import Foundation
 
 // MARK: - What the coach says
 //
-// "Jake, out" · "Shortstop got em" · "Throwing error, number 7" · "Safe" · "Undo"
-// An outcome word is required; the fielder is optional (the Fielding pick is used without one).
-// Only short calls count, so sideline talk ("you're out of position, let's go again") is ignored.
+// Who's fielding: a scorebook number ("6"), a position word ("short") or a player's name ("Jake").
+// It sticks until another one is said. The only result to call is "safe": a rep with no call is an
+// out. "Undo" takes back the last rep. A call is only those words ("6", "safe", "6 safe", "undo");
+// anything with other words in it is talk and is ignored.
 
 struct VoiceCommand: Equatable {
     enum Action: Equatable {
-        case outcome(RepOutcome)
+        case safe
         case undo
     }
 
-    let action: Action
     /// Who the coach named, if anyone
     let fielder: Fielder?
+    let action: Action?
 }
 
 enum VoiceCommandParser {
-    /// Longer than this is conversation, not a call
-    static let maxWords = 6
+    /// "Six safe", "Jake Brown safe"; anything longer is conversation
+    static let maxWords = 3
 
     struct RosterName: Equatable {
         let id: UUID
         let name: String
-        let number: String
     }
 
     static func parse(_ text: String, roster: [RosterName] = []) -> VoiceCommand? {
-        let words = normalize(text)
+        var words = normalize(text)
         guard !words.isEmpty, words.count <= maxWords else { return nil }
 
-        if saysUndo(words) {
-            return VoiceCommand(action: .undo, fielder: nil)
+        if words == ["undo"] || words == ["scratch", "that"] {
+            return VoiceCommand(fielder: nil, action: .undo)
         }
-        guard let outcome = lastOutcome(words) else { return nil }
-        return VoiceCommand(action: .outcome(outcome), fielder: fielder(in: words, roster: roster))
+        var action: VoiceCommand.Action?
+        if let i = words.firstIndex(of: "safe") {
+            action = .safe
+            words.remove(at: i)
+        }
+        if words.isEmpty {
+            return action.map { VoiceCommand(fielder: nil, action: $0) }
+        }
+        // Every other word has to be the fielder, so talk like "nice play short" changes nothing
+        guard let fielder = fielder(exactly: words, roster: roster) else { return nil }
+        return VoiceCommand(fielder: fielder, action: action)
     }
 
-    /// Words to help the recognizer: the calls, positions and roster names
+    /// Words to help the recognizer: the numbers, positions, roster names and calls
     static func vocabulary(roster: [RosterName]) -> [String] {
-        ["out", "safe", "got em", "glove error", "throwing error", "undo"]
-            + positionPhrases.map(\.phrase)
+        ["safe", "undo"]
+            + (1...9).map(String.init)
+            + positionWords.map(\.phrase)
             + roster.map(\.name)
     }
 
     // MARK: Words
 
-    /// Lowercased words with punctuation dropped; "1st" → "first", "got'em" → "got em"
+    /// Lowercased words with punctuation dropped; "1st" → "first"
     static func normalize(_ text: String) -> [String] {
         let lowered = text.lowercased()
             .replacingOccurrences(of: "’", with: "'")
-            .replacingOccurrences(of: "'em", with: " em")
             .replacingOccurrences(of: "'", with: "")
             .replacingOccurrences(of: "-", with: " ")
-            .replacingOccurrences(of: "#", with: " number ")
         let words = lowered.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
-        let ordinals = ["1st": "first", "2nd": "second", "3rd": "third", "gotem": "got em", "gottem": "got em",
-                        "centerfield": "center field", "rightfield": "right field", "leftfield": "left field"]
-        return words.flatMap { (ordinals[$0] ?? $0).split(separator: " ").map(String.init) }
+        let joined = ["1st": "first", "2nd": "second", "3rd": "third",
+                      "centerfield": "center field", "rightfield": "right field", "leftfield": "left field",
+                      "shortstop": "short stop"]
+        return words.flatMap { (joined[$0] ?? $0).split(separator: " ").map(String.init) }
     }
 
-    private static func saysUndo(_ words: [String]) -> Bool {
-        words.contains("undo") || index(of: ["scratch", "that"], in: words) != nil
-    }
+    /// Scorebook numbers, as digits or words
+    private static let numberWords: [String: Int] = [
+        "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+    ]
 
-    /// The last outcome said wins ("out… no, safe" → safe)
-    private static func lastOutcome(_ words: [String]) -> RepOutcome? {
-        var found: RepOutcome?
-        for (i, word) in words.enumerated() {
-            let next = i + 1 < words.count ? words[i + 1] : ""
-            switch word {
-            case "out": found = .out
-            case "safe": found = .safe
-            case "got" where ["em", "him", "them", "um"].contains(next): found = .out
-            case "glove" where next.hasPrefix("error"): found = .gloveError
-            case "throwing" where next.hasPrefix("error"),
-                 "throw" where next.hasPrefix("error"),
-                 "throwin" where next.hasPrefix("error"): found = .throwingError
-            default: break
-            }
-        }
-        return found
-    }
+    /// How a number said on its own can come back from the recognizer
+    private static let soundAlikes: [String: Int] = [
+        "won": 1, "to": 2, "too": 2, "for": 4, "fore": 4, "sex": 6, "sics": 6, "ate": 8,
+    ]
 
-    // MARK: Fielder
-
-    private static let positionPhrases: [(phrase: String, position: Position)] = [
+    private static let positionWords: [(phrase: String, position: Position)] = [
         ("pitcher", .pitcher), ("catcher", .catcher),
         ("first base", .first), ("first baseman", .first),
         ("second base", .second), ("second baseman", .second),
         ("third base", .third), ("third baseman", .third),
-        ("shortstop", .shortstop), ("short stop", .shortstop), ("short", .shortstop),
+        ("short stop", .shortstop), ("short", .shortstop),
         ("left field", .left), ("left fielder", .left),
         ("center field", .center), ("center fielder", .center), ("center", .center),
         ("right field", .right), ("right fielder", .right),
     ]
 
-    /// The first player or position named. "Shortstop, out at first base" is the shortstop.
-    private static func fielder(in words: [String], roster: [RosterName]) -> Fielder? {
-        // Earliest mention wins; at the same spot, the longer match ("Jake Brown" over "Jake")
-        var best: (index: Int, length: Int, fielder: Fielder)?
-        func consider(_ index: Int, _ length: Int, _ fielder: Fielder) {
-            guard let current = best else { best = (index, length, fielder); return }
-            if index < current.index || (index == current.index && length > current.length) {
-                best = (index, length, fielder)
-            }
-        }
+    // MARK: Fielder
 
-        // "number 7"
-        for i in words.indices.dropLast() where words[i] == "number" {
-            if let player = roster.first(where: { !$0.number.isEmpty && $0.number == words[i + 1] }) {
-                consider(i, 2, .player(player.id))
-            }
+    /// The fielder when these words name one and nothing else: "6", "short stop", "Mia Lopez"
+    private static func fielder(exactly words: [String], roster: [RosterName]) -> Fielder? {
+        if words.count == 1, let n = numberWords[words[0]] ?? soundAlikes[words[0]] {
+            return Position(number: n).map(Fielder.position)
         }
-        // A player's full name, or a first name only one player has
-        for player in roster {
-            let full = normalize(player.name)
-            guard let first = full.first else { continue }
-            if let i = index(of: full, in: words) {
-                consider(i, full.count, .player(player.id))
-            } else if roster.filter({ normalize($0.name).first == first }).count == 1,
-                      let i = words.firstIndex(of: first) {
-                consider(i, 1, .player(player.id))
-            }
+        if let entry = positionWords.first(where: { $0.phrase.split(separator: " ").map(String.init) == words }) {
+            return .position(entry.position)
         }
-        for entry in positionPhrases {
-            let phrase = entry.phrase.split(separator: " ").map(String.init)
-            if let i = index(of: phrase, in: words) {
-                consider(i, phrase.count, .position(entry.position))
-            }
+        if let player = roster.first(where: { normalize($0.name) == words }) {
+            return .player(player.id)
         }
-        return best?.fielder
+        // A first name only one player has
+        if words.count == 1 {
+            let matches = roster.filter { normalize($0.name).first == words[0] }
+            if matches.count == 1 { return .player(matches[0].id) }
+        }
+        return nil
     }
 
     private static func index(of phrase: [String], in words: [String]) -> Int? {

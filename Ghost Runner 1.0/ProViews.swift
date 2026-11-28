@@ -6,25 +6,23 @@ import SwiftData
 /// What the training screen needs for Pro; nil in the free app
 struct ProTraining {
     var fielder: Binding<String>
-    /// A rep has started and has no outcome yet
+    /// A rep has started and hasn't been logged yet (it's an out unless "safe" is called)
     var hasPendingRep: Bool
-    /// "Jake #7 · SS · Out" after a tap, until the next rep starts
+    /// "6 · Shortstop · Out" once logged, until the next rep starts
     var lastLogged: String?
     /// Voice logging state; nil when voice is off
     var voice: VoiceDisplay?
-    var onOutcome: (RepOutcome) -> Void
+    var onSafe: () -> Void
     var onUndo: () -> Void
 }
 
 /// The microphone line on the training screen
 struct VoiceDisplay: Equatable {
     var status: VoiceListener.Status
-    var heard: String
 
     var text: String {
         switch status {
-        case .listening: heard.isEmpty ? "Listening · say \u{201C}Jake, out\u{201D} or \u{201C}Shortstop, safe\u{201D}"
-                                       : "Heard \u{201C}\(heard)\u{201D}"
+        case .listening: "Listening · fielder 1\u{2013}9 or a name · \u{201C}safe\u{201D}"
         case .off: "Voice starting…"
         case .denied: "Voice is off: allow Microphone and Speech Recognition for Ghost Runner in Settings"
         case .unavailable: "Voice isn't available right now"
@@ -50,8 +48,8 @@ struct FielderCard: View {
 
     private var options: [(title: String, fielder: Fielder)] {
         [(Self.teamTitle, .team)]
+            + Position.allCases.map { ($0.numberedTitle, .position($0)) }
             + roster.map { (title($0), .player($0.id)) }
-            + Position.allCases.map { ($0.title, .position($0)) }
     }
 
     private var titleBinding: Binding<String> {
@@ -84,19 +82,25 @@ struct OutcomeBar: View {
                 Label(voice.text, systemImage: voice.symbol)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(voice.color)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
             }
             if pro.hasPendingRep {
-                HStack(spacing: 8) {
-                    outcomeButton(.out, color: Theme.ready, big: true)
-                    outcomeButton(.safe, color: Theme.alert, big: true)
+                Button(action: pro.onSafe) {
+                    VStack(spacing: 2) {
+                        Text("SAFE")
+                            .font(.title3.weight(.heavy))
+                        Text("No call = out")
+                            .font(.caption.weight(.semibold))
+                            .opacity(0.8)
+                    }
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(Theme.alert, in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
                 }
-                HStack(spacing: 8) {
-                    outcomeButton(.gloveError, color: Theme.connecting, big: false)
-                    outcomeButton(.throwingError, color: Theme.connecting, big: false)
-                }
+                .buttonStyle(PressableButtonStyle())
             } else if let lastLogged = pro.lastLogged {
                 HStack {
                     Label("Logged: \(lastLogged)", systemImage: "checkmark.circle.fill")
@@ -114,22 +118,6 @@ struct OutcomeBar: View {
                 .card()
             }
         }
-    }
-
-    private func outcomeButton(_ outcome: RepOutcome, color: Color, big: Bool) -> some View {
-        Button { pro.onOutcome(outcome) } label: {
-            Text(big ? outcome.title.uppercased() : outcome.title)
-                .font(big ? .title3.weight(.heavy) : .subheadline.weight(.bold))
-                .foregroundStyle(big ? Theme.onAccent : color)
-                .frame(maxWidth: .infinity, minHeight: big ? 56 : 40)
-                .background(big ? color : Theme.card,
-                            in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
-                        .strokeBorder(color.opacity(big ? 0 : 0.6), lineWidth: 1)
-                )
-        }
-        .buttonStyle(PressableButtonStyle())
     }
 }
 
@@ -290,7 +278,7 @@ struct RepHistoryView: View {
     var body: some View {
         List {
             if reps.isEmpty {
-                Text("No reps yet. With Pro on, tap Out, Safe or an error after each rep on the training screen.")
+                Text("No reps yet. With Pro on, every rep is logged on the training screen: an out unless you call \u{201C}safe\u{201D}.")
                     .font(.subheadline)
                     .foregroundStyle(Theme.label)
                     .listRowBackground(Theme.card)

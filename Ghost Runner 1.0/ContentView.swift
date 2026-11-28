@@ -36,16 +36,17 @@ struct ContentView: View {
     @AppStorage("proFielder") private var fielderRaw = Fielder.team.rawValue
     @State private var pendingRep: PendingRep?
     @State private var lastLogged: Rep?
-    /// The rep behind lastLogged, so Undo can bring the outcome buttons back
-    @State private var lastLoggedFrom: PendingRep?
+    /// When lastLogged was logged as an out with no call, so a late "safe" can still fix it
+    @State private var lastOutAt: Date?
+    /// Logs the open rep as an out if nothing is called in time
+    @State private var outTimer: Task<Void, Never>?
+    /// Counts reps, so the out timer only logs the rep it was started for
+    @State private var repSerial = 0
     @State private var showTeam = false
-    /// When the open rep started; voice calls count for `voiceWindow` after the bat strike
-    @State private var pendingRepAt = Date.distantPast
     // Pro voice: hands-free logging on the training screen
     @AppStorage("proVoice") private var voiceEnabled = true
     @AppStorage("proSayItBack") private var sayItBack = true
     @StateObject private var voice = VoiceListener()
-    private static let voiceWindow: TimeInterval = 20
 
     /// Listen only on the training screen, in the foreground, with Pro voice on
     private var shouldListen: Bool {
@@ -248,7 +249,8 @@ struct ContentView: View {
             stopTimer()
             resetTagUp()
         }
-        // Voice calls don't count while paused, and talk during the pause is forgotten
+        // A rep interrupted by the pause isn't logged, and talk during the pause is forgotten
+        if paused { clearRep() }
         voice.newCall()
     }
 
@@ -291,9 +293,11 @@ struct ContentView: View {
 
     /// A hit that starts the ghost runner; with Pro on, it also opens a rep to log
     private func startRep() {
+        // The previous rep had no "safe" call: it was an out
+        logPendingAsOut()
         startTimer()
         guard proEnabled, let sport = path.last else { return }
-        pendingRep = PendingRep(
+        let pending = PendingRep(
             fielder: Fielder(rawValue: fielderRaw),
             players: ProStore.shared.players(),
             sport: sport,
@@ -303,10 +307,55 @@ struct ContentView: View {
             runnerTime: selectedDelay,
             usedCustomTime: customTimeEnabled
         )
-        pendingRepAt = Date()
+        pendingRep = pending
+        repSerial += 1
+        let serial = repSerial
         lastLogged = nil
+        lastOutAt = nil
         // Only what's said after the bat strike counts
         voice.newCall()
+
+        let deadline = RepCall.outDeadline(start: Date(), runnerTime: selectedDelay)
+        outTimer?.cancel()
+        outTimer = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+            guard !Task.isCancelled, serial == repSerial else { return }
+            logPendingAsOut()
+        }
+    }
+
+    private func logPendingAsOut() {
+        outTimer?.cancel()
+        guard let pending = pendingRep else { return }
+        lastLogged = ProStore.shared.record(pending, outcome: .out)
+        lastOutAt = Date()
+        pendingRep = nil
+    }
+
+    /// "Safe": the open rep, or one just logged as an out with no call
+    @discardableResult
+    private func logSafe() -> Bool {
+        if let pending = pendingRep {
+            outTimer?.cancel()
+            lastLogged = ProStore.shared.record(pending, outcome: .safe)
+            lastOutAt = nil
+            pendingRep = nil
+            return true
+        }
+        if let rep = lastLogged, let at = lastOutAt, RepCall.canChangeToSafe(loggedAt: at, now: Date()) {
+            ProStore.shared.change(rep, to: .safe)
+            lastOutAt = nil
+            return true
+        }
+        return false
+    }
+
+    /// The coach named the fielder: they stay the pick, and get credit for the open rep
+    private func setFielder(_ fielder: Fielder) {
+        fielderRaw = fielder.rawValue
+        if let pending = pendingRep {
+            pendingRep = pending.crediting(fielder, players: ProStore.shared.players())
+        }
     }
 
     private var proTraining: ProTraining {
@@ -314,31 +363,16 @@ struct ContentView: View {
             fielder: $fielderRaw,
             hasPendingRep: pendingRep != nil,
             lastLogged: lastLogged.map { "\($0.fielderLabel) · \($0.outcome.title)" },
-            voice: voiceEnabled ? VoiceDisplay(status: voice.status, heard: voice.heard) : nil,
-            onOutcome: { logOutcome($0) },
+            voice: voiceEnabled ? VoiceDisplay(status: voice.status) : nil,
+            onSafe: { logSafe() },
             onUndo: undoLastRep
         )
-    }
-
-    @discardableResult
-    private func logOutcome(_ outcome: RepOutcome, credit fielder: Fielder? = nil) -> Rep? {
-        guard var pending = pendingRep else { return nil }
-        if let fielder {
-            // The coach named who made the play: credit them, and keep them as the pick
-            pending = pending.crediting(fielder, players: ProStore.shared.players())
-            fielderRaw = pending.fielder.rawValue
-        }
-        lastLogged = ProStore.shared.record(pending, outcome: outcome)
-        lastLoggedFrom = pending
-        pendingRep = nil
-        return lastLogged
     }
 
     private func undoLastRep() {
         if let rep = lastLogged { ProStore.shared.delete(rep) }
         lastLogged = nil
-        // Pick again
-        pendingRep = lastLoggedFrom
+        lastOutAt = nil
     }
 
     // MARK: - Pro voice
@@ -346,7 +380,7 @@ struct ContentView: View {
     private func updateListening(_ listen: Bool) {
         if listen {
             voice.roster = ProStore.shared.players().map {
-                VoiceCommandParser.RosterName(id: $0.id, name: $0.name, number: $0.number)
+                VoiceCommandParser.RosterName(id: $0.id, name: $0.name)
             }
             Task { await voice.start() }
         } else {
@@ -356,22 +390,39 @@ struct ContentView: View {
 
     private func handleVoice(_ command: VoiceCommand) {
         guard proEnabled, !paused else { return }
+        var said: [String] = []
+        if let fielder = command.fielder {
+            setFielder(fielder)
+            said.append(spokenName(fielder))
+        }
         switch command.action {
-        case .outcome(let outcome):
-            guard pendingRep != nil, Date().timeIntervalSince(pendingRepAt) <= Self.voiceWindow,
-                  let rep = logOutcome(outcome, credit: command.fielder) else { return }
-            if sayItBack { voice.say(rep.spokenSummary) }
+        case .safe:
+            if logSafe() { said.append("Safe") }
         case .undo:
-            guard lastLogged != nil else { return }
-            undoLastRep()
-            if sayItBack { voice.say("Undone") }
+            if lastLogged != nil {
+                undoLastRep()
+                said.append("Undone")
+            }
+        case nil:
+            break
+        }
+        if sayItBack, !said.isEmpty { voice.say(said.joined(separator: ", ")) }
+    }
+
+    private func spokenName(_ fielder: Fielder) -> String {
+        switch fielder {
+        case .team: "Team"
+        case .position(let p): p.title
+        case .player(let id):
+            ProStore.shared.players().first { $0.id == id }?.name ?? "Player"
         }
     }
 
     private func clearRep() {
+        outTimer?.cancel()
         pendingRep = nil
         lastLogged = nil
-        lastLoggedFrom = nil
+        lastOutAt = nil
     }
 
     // MARK: - Countdown

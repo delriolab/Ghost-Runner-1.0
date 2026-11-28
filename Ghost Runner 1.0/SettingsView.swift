@@ -45,7 +45,7 @@ struct SettingsView: View {
                 .frame(minHeight: 52)
                 .card()
 
-                Text("Log Out, Safe and errors after each rep, keep a roster and see rep history. Turn off to use the app exactly as before.")
+                Text("Logs every rep for whoever is fielding: an out unless you call safe. Keep a roster and see rep history. Turn off to use the app exactly as before.")
                     .font(.footnote)
                     .foregroundStyle(Theme.label)
                     .padding(.horizontal, 16)
@@ -71,7 +71,7 @@ struct SettingsView: View {
                     .padding(.horizontal, 16)
                     .card()
 
-                    Text("After the bat strike, call the play: \u{201C}Jake, out\u{201D}, \u{201C}Shortstop, got em\u{201D}, \u{201C}Safe\u{201D}, \u{201C}Glove error\u{201D}, \u{201C}Throwing error, number 7\u{201D}. Say \u{201C}Undo\u{201D} to take one back. Say it back repeats each call out loud.")
+                    Text("Say who\u{2019}s fielding: 1 pitcher, 2 catcher, 3 first, 4 second, 5 third, 6 short, 7 left, 8 center, 9 right, or a player\u{2019}s name. It stays until you say another. Say \u{201C}safe\u{201D} when the runner beats the play; every other rep is an out. \u{201C}Undo\u{201D} takes back the last rep. Say it back repeats what it heard.")
                         .font(.footnote)
                         .foregroundStyle(Theme.label)
                         .padding(.horizontal, 16)

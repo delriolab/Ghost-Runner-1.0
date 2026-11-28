@@ -12,12 +12,40 @@ enum ProAccess {
     static let enabledKey = "proEnabled"
 }
 
+/// When a rep is decided. Only "safe" is called; a rep with no call is an out.
+enum RepCall {
+    /// A rep with no "safe" becomes an out this long after the buzzer (or at the next bat strike)
+    static let callAfterBuzzer: TimeInterval = 8
+    /// A late "safe" still fixes a rep just logged as an out, until the next bat strike
+    static let lateSafe: TimeInterval = 15
+
+    /// When an uncalled rep is logged as an out
+    static func outDeadline(start: Date, runnerTime: Double) -> Date {
+        start.addingTimeInterval(runnerTime + callAfterBuzzer)
+    }
+
+    static func canChangeToSafe(loggedAt: Date, now: Date) -> Bool {
+        now.timeIntervalSince(loggedAt) <= lateSafe
+    }
+}
+
 /// Defensive positions, in scorebook order
 enum Position: String, CaseIterable, Identifiable, Codable {
     case pitcher = "P", catcher = "C", first = "1B", second = "2B", third = "3B"
     case shortstop = "SS", left = "LF", center = "CF", right = "RF"
 
     var id: String { rawValue }
+
+    /// Scorebook number: pitcher 1 … right field 9
+    var number: Int { Self.allCases.firstIndex(of: self)! + 1 }
+
+    init?(number: Int) {
+        guard (1...9).contains(number) else { return nil }
+        self = Self.allCases[number - 1]
+    }
+
+    /// "6 · Shortstop"
+    var numberedTitle: String { "\(number) · \(title)" }
 
     var title: String {
         switch self {
@@ -114,19 +142,12 @@ final class Rep {
     var position: Position? { Position(rawValue: positionRaw) }
     var intensity: Intensity? { Intensity(rawValue: intensityRaw) }
 
-    /// Said back after a voice call: "Jake, out", "Shortstop, glove error", "Safe"
-    var spokenSummary: String {
-        let name = playerName.components(separatedBy: " #").first ?? ""
-        let who = name.isEmpty ? (position?.title ?? "") : name
-        return who.isEmpty ? outcome.title : "\(who), \(outcome.title)"
-    }
-
-    /// "Jake #7 · SS", "Shortstop", or "Team"
+    /// "Jake #7 · SS", "6 · Shortstop", or "Team"
     var fielderLabel: String {
         switch (playerName.isEmpty, position) {
         case (false, let position?): "\(playerName) · \(position.rawValue)"
         case (false, nil): playerName
-        case (true, let position?): position.title
+        case (true, let position?): position.numberedTitle
         case (true, nil): "Team"
         }
     }
@@ -270,6 +291,11 @@ final class ProStore {
         context.insert(rep)
         try? context.save()
         return rep
+    }
+
+    func change(_ rep: Rep, to outcome: RepOutcome) {
+        rep.outcomeRaw = outcome.rawValue
+        try? container?.mainContext.save()
     }
 
     func delete(_ rep: Rep) {
