@@ -42,6 +42,8 @@ struct ContentView: View {
     @State private var outTimer: Task<Void, Never>?
     /// Counts reps, so the out timer only logs the rep it was started for
     @State private var repSerial = 0
+    /// When "turn two" was said without a fielder, so a number right after makes it that double play
+    @State private var turnTwoAt: Date?
     @State private var showRepHistory = false
     // Pro voice: hands-free logging on the training screen
     @AppStorage("proVoice") private var voiceEnabled = true
@@ -390,9 +392,33 @@ struct ContentView: View {
     }
 
     private func handleVoice(_ command: VoiceCommand) {
-        guard proEnabled, !paused else { return }
+        guard proEnabled else { return }
+        // "Ghost Runner pause" / "Ghost Runner resume" work like the Pause button
+        if command.action == .pause || command.action == .resume {
+            let wantPaused = command.action == .pause
+            if wantPaused != paused {
+                togglePause()
+                if sayItBack { voice.say(paused ? "Paused" : "Resumed") }
+            }
+            return
+        }
+        guard !paused else { return }
+
         var said: [String] = []
-        if let fielder = command.fielder {
+        var fielder = command.fielder
+        if command.turnTwo && fielder == nil {
+            // "Turn two" alone: the current fielder's double play, or the number said next
+            turnTwoAt = Date()
+            fielder = Fielder(rawValue: fielderRaw).turningTwo
+            if fielder == nil { said.append("Turn two") }
+        } else if let named = fielder {
+            if case .position = named, let at = turnTwoAt,
+               Date().timeIntervalSince(at) <= DoublePlay.followUp, let doublePlay = named.turningTwo {
+                fielder = doublePlay
+            }
+            turnTwoAt = nil
+        }
+        if let fielder {
             setFielder(fielder)
             said.append(spokenName(fielder))
         }
@@ -404,7 +430,7 @@ struct ContentView: View {
                 undoLastRep()
                 said.append("Undone")
             }
-        case nil:
+        case .pause, .resume, nil:
             break
         }
         if sayItBack, !said.isEmpty { voice.say(said.joined(separator: ", ")) }
@@ -414,6 +440,7 @@ struct ContentView: View {
         switch fielder {
         case .team: "Team"
         case .position(let p): p.title
+        case .doublePlay(let p): "\(DoublePlay.spoken(from: p) ?? ""), double play"
         case .player(let id):
             ProStore.shared.players().first { $0.id == id }?.name ?? "Player"
         }

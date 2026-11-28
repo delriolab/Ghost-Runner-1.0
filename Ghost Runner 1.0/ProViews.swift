@@ -40,7 +40,8 @@ struct FielderCard: View {
     private static let teamTitle = "Whole team"
 
     private var options: [(title: String, fielder: Fielder)] {
-        [(Self.teamTitle, .team)] + Position.allCases.map { ($0.numberedTitle, .position($0)) }
+        ([Fielder.team] + Position.allCases.map(Fielder.position) + DoublePlay.starts.map(Fielder.doublePlay))
+            .map { ($0.title, $0) }
     }
 
     private var titleBinding: Binding<String> {

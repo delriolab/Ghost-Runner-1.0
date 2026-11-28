@@ -712,6 +712,8 @@ struct VoiceCommandTests {
         #expect(fielder("Shortstop") == .position(.shortstop))
         #expect(fielder("center field") == .position(.center))
         #expect(fielder("second base") == .position(.second))
+        #expect(fielder("third") == .position(.third))
+        #expect(fielder("first") == .position(.first))
         #expect(fielder("pitcher") == .position(.pitcher))
         #expect(fielder("Jake") == .player(jake.id))
         #expect(fielder("Mia") == .player(mia.id))
@@ -743,5 +745,92 @@ struct VoiceCommandTests {
         #expect(parse("you're out of position, let's go again") == nil)
         #expect(parse("let's play it safe out there") == nil)      // too long to be a call
         #expect(parse("") == nil)
+    }
+}
+
+struct DoublePlayTests {
+    @Test func routesFromWhereItsFielded() {
+        #expect(DoublePlay.name(from: .third) == "5-4-3")
+        #expect(DoublePlay.name(from: .shortstop) == "6-4-3")
+        #expect(DoublePlay.name(from: .second) == "4-6-3")
+        #expect(DoublePlay.name(from: .first) == "3-6-3")
+        #expect(DoublePlay.name(from: .center) == nil)
+        #expect(DoublePlay.name(from: .pitcher) == nil)
+        #expect(DoublePlay.spoken(from: .shortstop) == "six four three")
+    }
+
+    @Test func savedAndReadBack() {
+        #expect(Fielder(rawValue: Fielder.doublePlay(.third).rawValue) == .doublePlay(.third))
+        #expect(Fielder(rawValue: "doublePlay:CF") == .team)       // not a double play spot
+        #expect(Fielder.doublePlay(.second).title == "4-6-3 double play")
+    }
+
+    @Test func turningTwoFromTheCurrentFielder() {
+        #expect(Fielder.position(.shortstop).turningTwo == .doublePlay(.shortstop))
+        #expect(Fielder.doublePlay(.third).turningTwo == .doublePlay(.third))
+        #expect(Fielder.position(.left).turningTwo == nil)
+        #expect(Fielder.team.turningTwo == nil)
+    }
+
+    @Test func doublePlayRepsRecordThePlay() {
+        let p = PendingRep(fielder: .doublePlay(.shortstop), players: [], sport: .baseball,
+                           category: "High school (60/90)", drill: "Home to 1st", intensity: .pressure,
+                           runnerTime: 4.2, usedCustomTime: false)
+        #expect(p.position == .shortstop)
+        #expect(p.play == "6-4-3")
+        let rep = Rep(p, outcome: .safe)
+        #expect(rep.play == "6-4-3")
+        #expect(rep.fielderLabel == "6-4-3 double play")
+        let single = PendingRep(fielder: .position(.shortstop), players: [], sport: .baseball, category: "",
+                                drill: "", intensity: .routine, runnerTime: 0, usedCustomTime: false)
+        #expect(single.play.isEmpty)
+    }
+}
+
+struct VoiceDoublePlayAndPauseTests {
+    private func parse(_ text: String) -> VoiceCommand? { VoiceCommandParser.parse(text) }
+
+    @Test func turnTwoWithWhereItsFielded() {
+        #expect(parse("turn two five")?.fielder == .doublePlay(.third))        // 5-4-3
+        #expect(parse("Turn two, third")?.fielder == .doublePlay(.third))
+        #expect(parse("turn 2 6")?.fielder == .doublePlay(.shortstop))         // 6-4-3
+        #expect(parse("turn two short")?.fielder == .doublePlay(.shortstop))
+        #expect(parse("turn it short")?.fielder == .doublePlay(.shortstop))
+        #expect(parse("turn two shortstop")?.fielder == .doublePlay(.shortstop))
+        #expect(parse("turn two 4")?.fielder == .doublePlay(.second))          // 4-6-3
+        #expect(parse("turn two three")?.fielder == .doublePlay(.first))       // 3-6-3
+        #expect(parse("six turn two")?.fielder == .doublePlay(.shortstop))     // either order
+    }
+
+    @Test func rollItMeansTurnTwo() {
+        #expect(parse("roll it 5")?.fielder == .doublePlay(.third))
+        #expect(parse("Roll it, short")?.fielder == .doublePlay(.shortstop))
+        #expect(parse("roll it") == VoiceCommand(fielder: nil, action: nil, turnTwo: true))
+    }
+
+    @Test func turnTwoAloneIsForTheCurrentOrNextFielder() {
+        #expect(parse("Turn two") == VoiceCommand(fielder: nil, action: nil, turnTwo: true))
+        #expect(parse("turn to") == VoiceCommand(fielder: nil, action: nil, turnTwo: true))
+    }
+
+    @Test func noDoublePlayFromTheOutfield() {
+        #expect(parse("turn two 8") == nil)
+        #expect(parse("turn two pitcher") == nil)
+        #expect(parse("turn two quick") == nil)
+    }
+
+    @Test func safeOnADoublePlay() {
+        #expect(parse("turn two short safe") == VoiceCommand(fielder: .doublePlay(.shortstop), action: .safe, turnTwo: true))
+    }
+
+    @Test func ghostRunnerPauseAndResume() {
+        #expect(parse("Ghost Runner pause")?.action == .pause)
+        #expect(parse("ghostrunner, pause.")?.action == .pause)
+        #expect(parse("Ghost Runner resume")?.action == .resume)
+        #expect(parse("GhostRunner resume")?.action == .resume)
+        #expect(parse("pause") == nil)                     // needs "Ghost Runner" first
+        #expect(parse("resume") == nil)
+        #expect(parse("ghost runner") == nil)
+        #expect(parse("ghost runner fast") == nil)
     }
 }

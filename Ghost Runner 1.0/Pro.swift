@@ -62,6 +62,37 @@ enum Position: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// Double plays the coach can call. Where the ball is fielded decides the route:
+/// 5-4-3, 6-4-3, 4-6-3, 3-6-3. The ghost runner is the batter going to first.
+enum DoublePlay {
+    /// "Turn two" then a number within this long is that double play
+    static let followUp: TimeInterval = 4
+
+    /// Fielded at, in the order they're listed
+    static let starts: [Position] = [.third, .shortstop, .second, .first]
+
+    static func route(from start: Position) -> [Position]? {
+        switch start {
+        case .third: [.third, .second, .first]
+        case .shortstop: [.shortstop, .second, .first]
+        case .second: [.second, .shortstop, .first]
+        case .first: [.first, .shortstop, .first]
+        default: nil
+        }
+    }
+
+    /// "6-4-3"
+    static func name(from start: Position) -> String? {
+        route(from: start)?.map { String($0.number) }.joined(separator: "-")
+    }
+
+    /// "six four three", for Say it back
+    static func spoken(from start: Position) -> String? {
+        let words = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+        return route(from: start)?.map { words[$0.number] }.joined(separator: " ")
+    }
+}
+
 /// How the rep ended. Errors count as safe but are kept apart so coaches can see why.
 enum RepOutcome: String, CaseIterable, Codable {
     case out, safe, gloveError, throwingError
@@ -123,12 +154,15 @@ final class Rep {
     var runnerTime: Double = 0
     var usedCustomTime: Bool = false
     var outcomeRaw: String = RepOutcome.out.rawValue
+    /// "6-4-3" for a double play rep; empty otherwise
+    var play: String = ""
 
     init(_ pending: PendingRep, outcome: RepOutcome, at date: Date = Date()) {
         self.date = date
         self.playerID = pending.fielder.playerID
         self.playerName = pending.playerName
         self.positionRaw = pending.position?.rawValue ?? ""
+        self.play = pending.play
         self.sportRaw = pending.sport.rawValue
         self.category = pending.category
         self.drill = pending.drill
@@ -142,9 +176,10 @@ final class Rep {
     var position: Position? { Position(rawValue: positionRaw) }
     var intensity: Intensity? { Intensity(rawValue: intensityRaw) }
 
-    /// "Jake #7 · SS", "6 · Shortstop", or "Team"
+    /// "Jake #7 · SS", "6 · Shortstop", "6-4-3 double play", or "Team"
     var fielderLabel: String {
-        switch (playerName.isEmpty, position) {
+        if !play.isEmpty { return "\(play) double play" }
+        return switch (playerName.isEmpty, position) {
         case (false, let position?): "\(playerName) · \(position.rawValue)"
         case (false, nil): playerName
         case (true, let position?): position.numberedTitle
@@ -159,11 +194,16 @@ final class Rep {
 enum Fielder: Equatable {
     case team
     case position(Position)
+    /// A double play fielded at this position (5-4-3 from third, and so on)
+    case doublePlay(Position)
     case player(UUID)
 
     init(rawValue: String) {
         if rawValue.hasPrefix("position:"), let p = Position(rawValue: String(rawValue.dropFirst(9))) {
             self = .position(p)
+        } else if rawValue.hasPrefix("doublePlay:"), let p = Position(rawValue: String(rawValue.dropFirst(11))),
+                  DoublePlay.route(from: p) != nil {
+            self = .doublePlay(p)
         } else if rawValue.hasPrefix("player:"), let id = UUID(uuidString: String(rawValue.dropFirst(7))) {
             self = .player(id)
         } else {
@@ -175,7 +215,27 @@ enum Fielder: Equatable {
         switch self {
         case .team: "team"
         case .position(let p): "position:\(p.rawValue)"
+        case .doublePlay(let p): "doublePlay:\(p.rawValue)"
         case .player(let id): "player:\(id.uuidString)"
+        }
+    }
+
+    /// The double play for this fielder's spot, if there is one ("turn two" with 6 up → 6-4-3)
+    var turningTwo: Fielder? {
+        switch self {
+        case .position(let p), .doublePlay(let p):
+            DoublePlay.route(from: p) == nil ? nil : .doublePlay(p)
+        case .team, .player:
+            nil
+        }
+    }
+
+    /// "Whole team", "6 · Shortstop", "6-4-3 double play" (players aren't shown for now)
+    var title: String {
+        switch self {
+        case .team, .player: "Whole team"
+        case .position(let p): p.numberedTitle
+        case .doublePlay(let p): "\(DoublePlay.name(from: p) ?? "") double play"
         }
     }
 
@@ -190,6 +250,8 @@ struct PendingRep: Equatable {
     let fielder: Fielder
     let playerName: String
     let position: Position?
+    /// "6-4-3" for a double play; empty otherwise
+    let play: String
     let sport: Sport
     let category: String
     let drill: String
@@ -205,8 +267,14 @@ struct PendingRep: Equatable {
         self.playerName = player?.displayName ?? ""
         switch fielder {
         case .position(let p): self.position = p
+        case .doublePlay(let p): self.position = p
         case .player: self.position = player?.position
         case .team: self.position = nil
+        }
+        if case .doublePlay(let p) = fielder {
+            self.play = DoublePlay.name(from: p) ?? ""
+        } else {
+            self.play = ""
         }
         self.sport = sport
         self.category = category
